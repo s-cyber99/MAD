@@ -1,14 +1,3 @@
-// src/screens/LoginScreen.jsx
-// -----------------------------------------------------------------------------
-// Login screen shown before the main app (bottom tabs). Matches CivilHub's
-// visual language: slate hero banner, blue accent CTA, emerald highlights,
-// rounded 12-16px cards.
-//
-// This screen calls the `onLoginSuccess` prop once local validation passes.
-// It does NOT talk to a real backend yet — see the TODO in handleLogin()
-// for where to wire up actual authentication (Firebase Auth, your own
-// backend's /api/login, etc.).
-// -----------------------------------------------------------------------------
 import React, { useState } from "react";
 import {
   View,
@@ -25,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { loginUser, registerUser } from "../services/authService";
 
 const HERO_IMAGE_URL =
   "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200&q=80";
@@ -34,6 +24,8 @@ function isValidEmail(email) {
 }
 
 export default function LoginScreen({ onLoginSuccess }) {
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -43,8 +35,12 @@ export default function LoginScreen({ onLoginSuccess }) {
   const handleLogin = async () => {
     setErrorMsg("");
 
+    if (isRegistering && !name.trim()) {
+      setErrorMsg("Please enter your name.");
+      return;
+    }
     if (!email.trim() || !password.trim()) {
-      setErrorMsg("Please enter both email and password.");
+      setErrorMsg("Please enter email and password.");
       return;
     }
     if (!isValidEmail(email)) {
@@ -58,19 +54,10 @@ export default function LoginScreen({ onLoginSuccess }) {
 
     setLoading(true);
     try {
-      // TODO: Replace with a real auth call, e.g.:
-      //   const res = await fetch(`${BACKEND_BASE_URL}/api/login`, {
-      //     method: "POST",
-      //     headers: { "Content-Type": "application/json" },
-      //     body: JSON.stringify({ email, password }),
-      //   });
-      //   if (!res.ok) throw new Error("Invalid credentials");
-      //   const { token, user } = await res.json();
-      //   // persist token (e.g. SecureStore) and pass user up.
-      //
-      // Simulated network delay so the loading state is visible in this demo:
-      await new Promise((resolve) => setTimeout(resolve, 700));
-      onLoginSuccess?.({ email: email.trim() });
+      const result = isRegistering
+        ? await registerUser(name.trim(), email.trim(), password)
+        : await loginUser(email.trim(), password);
+      onLoginSuccess?.(result);
     } catch (error) {
       setErrorMsg(error.message || "Login failed. Please try again.");
     } finally {
@@ -109,10 +96,30 @@ export default function LoginScreen({ onLoginSuccess }) {
           </ImageBackground>
 
           <View style={styles.formCard}>
-            <Text style={styles.welcomeTitle}>Welcome back</Text>
-            <Text style={styles.welcomeSubtitle}>
-              Log in to continue checking feasibility and asking the AI assistant.
+            <Text style={styles.welcomeTitle}>
+              {isRegistering ? "Create account" : "Welcome back"}
             </Text>
+            <Text style={styles.welcomeSubtitle}>
+              {isRegistering
+                ? "Sign up to save your account and use CivilHub."
+                : "Log in to continue checking feasibility and asking the AI assistant."}
+            </Text>
+
+            {isRegistering && (
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Name</Text>
+                <View style={styles.inputWrap}>
+                  <Ionicons name="person-outline" size={18} color="#94a3b8" />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Your full name"
+                    placeholderTextColor="#94a3b8"
+                    value={name}
+                    onChangeText={setName}
+                  />
+                </View>
+              </View>
+            )}
 
             <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>Email</Text>
@@ -174,27 +181,39 @@ export default function LoginScreen({ onLoginSuccess }) {
                 <ActivityIndicator color="#ffffff" />
               ) : (
                 <>
-                  <Text style={styles.loginButtonText}>Log In</Text>
+                  <Text style={styles.loginButtonText}>
+                    {isRegistering ? "Sign Up" : "Log In"}
+                  </Text>
                   <Ionicons name="arrow-forward" size={18} color="#ffffff" />
                 </>
               )}
             </TouchableOpacity>
 
-            <View style={styles.dividerRow}>
+            {!isRegistering && <View style={styles.dividerRow}>
               <View style={styles.dividerLine} />
               <Text style={styles.dividerText}>or</Text>
               <View style={styles.dividerLine} />
-            </View>
+            </View>}
 
-            <TouchableOpacity style={styles.socialButton} activeOpacity={0.85}>
+            {!isRegistering && <TouchableOpacity style={styles.socialButton} activeOpacity={0.85}>
               <Ionicons name="logo-google" size={18} color="#1e293b" />
               <Text style={styles.socialButtonText}>Continue with Google</Text>
-            </TouchableOpacity>
+            </TouchableOpacity>}
 
             <View style={styles.signupRow}>
-              <Text style={styles.signupText}>Don't have an account?</Text>
-              <TouchableOpacity hitSlop={8}>
-                <Text style={styles.signupLink}> Sign up</Text>
+              <Text style={styles.signupText}>
+                {isRegistering ? "Already have an account?" : "Don't have an account?"}
+              </Text>
+              <TouchableOpacity
+                hitSlop={8}
+                onPress={() => {
+                  setIsRegistering((value) => !value);
+                  setErrorMsg("");
+                }}
+              >
+                <Text style={styles.signupLink}>
+                  {isRegistering ? " Log in" : " Sign up"}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -295,6 +314,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
+
   input: {
     flex: 1,
     color: "#0f172a",
