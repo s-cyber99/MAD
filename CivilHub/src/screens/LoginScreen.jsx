@@ -1,11 +1,3 @@
-// src/screens/LoginScreen.jsx
-// -----------------------------------------------------------------------------
-// Login screen shown before the main app (bottom tabs). Matches CivilHub's
-// visual language: slate hero banner, blue accent CTA, emerald highlights,
-// rounded 12-16px cards.
-//
-// This screen uses the CivilHub backend for registration and login.
-// -----------------------------------------------------------------------------
 import React, { useState } from "react";
 import {
   View,
@@ -322,6 +314,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
+
   input: {
     flex: 1,
     color: "#0f172a",
