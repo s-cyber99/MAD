@@ -59,7 +59,11 @@ export default function LoginScreen({ onLoginSuccess }) {
         : await loginUser(email.trim(), password);
       onLoginSuccess?.(result);
     } catch (error) {
-      setErrorMsg(error.message || "Login failed. Please try again.");
+      const message =
+        error?.message && error.message !== "Network request failed"
+          ? error.message
+          : "Unable to reach the CivilHub service. Please check your connection and backend status.";
+      setErrorMsg(message);
     } finally {
       setLoading(false);
     }

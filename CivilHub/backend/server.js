@@ -30,7 +30,7 @@ app.use(express.json({ limit: "1mb" }));
 const PORT = process.env.PORT || 4000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET || "civilhub-dev-secret-key";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 const GEMINI_URL =
   `https://generativelanguage.googleapis.com/v1beta/models/` +
