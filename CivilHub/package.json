@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
+    "dev": "concurrently -n \"BACKEND,EXPO\" -c \"blue,green\" \"npm run backend\" \"npm run web\"",
     "start": "expo start",
+    "server": "node backend/server.js",
+    "backend": "node backend/server.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web"
@@ -11,10 +14,12 @@
   "dependencies": {
     "@expo/metro-runtime": "~3.2.3",
     "@expo/vector-icons": "^14.0.3",
+    "@react-native-async-storage/async-storage": "1.23.1",
     "@react-navigation/bottom-tabs": "^6.5.20",
     "@react-navigation/native": "^6.1.17",
     "expo": "~51.0.0",
     "expo-font": "~12.0.10",
+    "expo-image-picker": "~15.1.0",
     "expo-linear-gradient": "~13.0.2",
     "expo-status-bar": "~1.12.1",
     "react": "18.2.0",
@@ -25,7 +30,8 @@
     "react-native-web": "~0.19.10"
   },
   "devDependencies": {
-    "@babel/core": "^7.24.0"
+    "@babel/core": "^7.24.0",
+    "concurrently": "^10.0.5"
   },
   "private": true
 }
