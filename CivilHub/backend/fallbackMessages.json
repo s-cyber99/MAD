@@ -1,0 +1,194 @@
+[
+  {
+    "id": "msg_seed_1",
+    "threadId": "thread_client_architect_1",
+    "senderRole": "client",
+    "engineerType": null,
+    "senderName": "Client Salman",
+    "text": "Hello Ar. Nusrat, I am planning to build a 6-story residential building on a 4.0 Katha plot in Mirpur. What are the mandatory setbacks?",
+    "attachedContext": {
+      "title": "Dhanmondi Brick & Glass Villa",
+      "architectural_style": "Exposed Brick & Louver",
+      "floors": 5,
+      "katha": 4,
+      "built_area_sqft": 9800,
+      "units_per_floor": 1,
+      "bedrooms": 4,
+      "bathrooms": 4,
+      "authority": "RAJUK"
+    },
+    "timestamp": "2026-09-29T10:33:27.701Z"
+  },
+  {
+    "id": "msg_seed_2",
+    "threadId": "thread_client_architect_1",
+    "senderRole": "engineer",
+    "engineerType": "architect",
+    "senderName": "Ar. Nusrat Jahan",
+    "text": "Hello Salman! For a 4.0 Katha plot under RAJUK, you need a minimum 5ft front setback, 3.28ft (1m) side setbacks, and a 6.5ft (2m) rear setback. Your 5-6 story target is well within FAR limits for a 20ft road.",
+    "attachedContext": null,
+    "timestamp": "2026-09-29T10:45:27.702Z"
+  },
+  {
+    "id": "msg_seed_3",
+    "threadId": "thread_client_structural_1",
+    "senderRole": "client",
+    "engineerType": null,
+    "senderName": "Client Salman",
+    "text": "Engr. Tanvir, could you review column sizing and shear wall requirements for a 10-story tower under BNBC 2020 seismic zone 2?",
+    "attachedContext": {
+      "title": "Gulshan Modernist Horizon",
+      "architectural_style": "Biophilic Contemporary",
+      "floors": 10,
+      "katha": 5,
+      "built_area_sqft": 22500,
+      "authority": "RAJUK"
+    },
+    "timestamp": "2026-09-29T11:03:27.702Z"
+  },
+  {
+    "id": "msg_seed_4",
+    "threadId": "thread_client_structural_1",
+    "senderRole": "engineer",
+    "engineerType": "structural",
+    "senderName": "Engr. Tanvir Ahmed, PEng",
+    "text": "For a 10-story structure in Dhaka (Zone 2, Z=0.20), dual framing with a reinforced concrete central core shear wall is highly recommended. Typical basement/ground floor columns will require approximately 20\" x 24\" with 60-grade rebar.",
+    "attachedContext": null,
+    "timestamp": "2026-09-29T11:21:27.702Z"
+  },
+  {
+    "id": "msg_seed_5",
+    "threadId": "thread_client_soil_1",
+    "senderRole": "client",
+    "engineerType": null,
+    "senderName": "Client Salman",
+    "text": "Engr. Rafiqul, at what SPT N-value would shallow footing be acceptable for 5 stories?",
+    "attachedContext": null,
+    "timestamp": "2026-09-29T11:39:27.702Z"
+  },
+  {
+    "id": "msg_seed_6",
+    "threadId": "thread_client_soil_1",
+    "senderRole": "engineer",
+    "engineerType": "soil",
+    "senderName": "Engr. Mohammad Rafiqul",
+    "text": "Under BNBC 2020, for shallow mat or isolated footings supporting 5 stories, you generally need an SPT N-value of 15 or higher within the top 15-20 feet. If N is below 10, bored cast-in-situ piling will be required.",
+    "attachedContext": null,
+    "timestamp": "2026-09-29T12:03:27.702Z"
+  },
+  {
+    "id": "msg_1790685224914_q4juyb",
+    "threadId": "thread_client_structural_1",
+    "senderRole": "client",
+    "engineerType": null,
+    "senderName": "Client Salman",
+    "text": "Hello Engr. Tanvir, can we build a 7-story building on 5 Katha?",
+    "attachedContext": {
+      "title": "Gulshan Modernist Horizon",
+      "floors": 7,
+      "katha": 5
+    },
+    "timestamp": "2026-09-29T12:33:44.914Z"
+  },
+  {
+    "id": "msg_1790685224920_rcdz0n",
+    "threadId": "thread_client_structural_1",
+    "senderRole": "engineer",
+    "engineerType": "structural",
+    "senderName": "Engr. Tanvir Ahmed, PEng",
+    "text": "Hello Salman, yes you can! For 7 stories under RAJUK 2020 rules, minimum road width is 20ft and FAR is 3.5.",
+    "attachedContext": null,
+    "timestamp": "2026-09-29T12:33:44.920Z"
+  },
+  {
+    "id": "msg_1790686739664_qt2q06",
+    "threadId": "thread_client_architect_1",
+    "senderRole": "client",
+    "engineerType": null,
+    "senderName": "Client Salman",
+    "text": "hello",
+    "attachedContext": null,
+    "timestamp": "2026-09-29T12:58:59.692Z"
+  },
+  {
+    "id": "msg_1790686785962_bfw8mg",
+    "threadId": "thread_client_architect_1",
+    "senderRole": "client",
+    "engineerType": null,
+    "senderName": "Client Salman",
+    "text": "heello",
+    "attachedContext": null,
+    "timestamp": "2026-09-29T12:59:45.992Z"
+  },
+  {
+    "id": "msg_1790687474708_kmp56d",
+    "threadId": "thread_client_architect_1",
+    "senderRole": "engineer",
+    "engineerType": "architect",
+    "senderName": "Ar. Nusrat Jahan",
+    "text": "Hello Salman, I received your message. I am ready to review your architectural layout.",
+    "attachedContext": null,
+    "timestamp": "2026-09-29T13:11:14.708Z"
+  },
+  {
+    "id": "msg_1790687615102_8j0b07",
+    "threadId": "thread_client_architect_1",
+    "senderRole": "client",
+    "engineerType": null,
+    "senderName": "Client Salman",
+    "text": "how are you?",
+    "attachedContext": null,
+    "timestamp": "2026-09-29T13:13:35.133Z"
+  },
+  {
+    "id": "msg_1790715158300_g6o2sm",
+    "threadId": "thread_client_architect_1",
+    "senderRole": "engineer",
+    "engineerType": "architect",
+    "senderName": "Ar. Nusrat Jahan",
+    "text": "I am fine and you??",
+    "attachedContext": null,
+    "timestamp": "2026-09-29T20:52:38.333Z"
+  },
+  {
+    "id": "msg_1790738467085_9mw85b",
+    "threadId": "thread_client_architect_1",
+    "senderRole": "client",
+    "engineerType": null,
+    "senderName": "Client Salman",
+    "text": "I am fine also",
+    "attachedContext": null,
+    "timestamp": "2026-09-30T03:21:07.287Z"
+  },
+  {
+    "id": "msg_1790739790896_h6de66",
+    "threadId": "thread_client_architect_1",
+    "senderRole": "client",
+    "engineerType": null,
+    "senderName": "Client Salman",
+    "text": "Hi, I would like to consult about the design \"Dhanmondi Brick & Glass Villa\" (5 floors on 4 Katha plot). Could you review this?",
+    "attachedContext": {
+      "id": 2,
+      "title": "Dhanmondi Brick & Glass Villa",
+      "architectural_style": "Exposed Brick & Louver",
+      "floors": 5,
+      "katha": 4,
+      "built_area_sqft": 9800,
+      "units_per_floor": 1,
+      "unit_size_sqft": 1960,
+      "bedrooms": 4,
+      "bathrooms": 4,
+      "balconies": 3,
+      "dining_space": "18' × 13' Spacious Open Dining with Timber Louver Partition & Garden View",
+      "drawing_space": "22' × 16' Full-Span Drawing Lounge with Terracotta Brick Accent Wall",
+      "kitchen_space": "14' × 10' Gourmet Kitchen with Breakfast Bar & Maid's Toilet Corner",
+      "has_basement": false,
+      "has_garage": true,
+      "parking_capacity": 5,
+      "rooftop_type": "Garden",
+      "image_url": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&auto=format&fit=crop&q=80",
+      "authority": "RAJUK"
+    },
+    "timestamp": "2026-09-30T03:43:10.935Z"
+  }
+]
