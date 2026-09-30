@@ -6,7 +6,7 @@ import AsyncStorageModule from "@react-native-async-storage/async-storage";
 // Bulletproof unwrap across Metro, Webpack, and direct Node execution
 const AsyncStorage = AsyncStorageModule?.default || AsyncStorageModule;
 
-export const CHAT_STORAGE_KEY = "@civilhub_chat_messages_v2";
+export const CHAT_STORAGE_KEY = "@civilhub_chat_messages_v3";
 
 export const THREAD_AI = "thread_client_ai";
 export const THREAD_STRUCTURAL = "thread_client_structural";
@@ -153,10 +153,42 @@ export function getExpertForThread(threadId) {
   return VERIFIED_EXPERTS.find((e) => e.threadId === threadId) || null;
 }
 
-export function getThreadIdForEngineer(engineerType) {
-  if (engineerType === "architect") return "thread_client_architect_1";
-  if (engineerType === "soil") return "thread_client_soil_1";
+export function getThreadIdForEngineer(engineerType, engineerName = "") {
+  const lowerName = (engineerName || "").toLowerCase();
+  if (lowerName.includes("shahriar") || lowerName.includes("kabir")) {
+    return "thread_client_structural_2";
+  }
+  if (lowerName.includes("mahmudul") || lowerName.includes("hasan")) {
+    return "thread_client_architect_2";
+  }
+  if (lowerName.includes("anisur") || lowerName.includes("rahman")) {
+    return "thread_client_soil_2";
+  }
+  if (lowerName.includes("nusrat") || engineerType === "architect") {
+    return "thread_client_architect_1";
+  }
+  if (lowerName.includes("rafiqul") || engineerType === "soil") {
+    return "thread_client_soil_1";
+  }
   return "thread_client_structural_1";
+}
+
+export function getThreadsForEngineer(engineerType) {
+  const allChannels = [
+    { id: "thread_client_structural_1", label: "Engr. Tanvir Ahmed, PEng (Structural)", discipline: "structural", expertId: "structural_1" },
+    { id: "thread_client_architect_1", label: "Ar. Nusrat Jahan (Architect)", discipline: "architect", expertId: "architect_1" },
+    { id: "thread_client_soil_1", label: "Engr. Mohammad Rafiqul (Soil/Geotech)", discipline: "soil", expertId: "soil_1" },
+    { id: "thread_client_structural_2", label: "Engr. Shahriar Kabir (Channel 2)", discipline: "structural", expertId: "structural_2" },
+    { id: "thread_client_architect_2", label: "Ar. Mahmudul Hasan (Channel 2)", discipline: "architect", expertId: "architect_2" },
+    { id: "thread_client_soil_2", label: "Engr. Anisur Rahman (Channel 2)", discipline: "soil", expertId: "soil_2" },
+  ];
+
+  // Put current engineer discipline channels at the front
+  return allChannels.sort((a, b) => {
+    const aMatch = a.discipline === engineerType ? 0 : 1;
+    const bMatch = b.discipline === engineerType ? 0 : 1;
+    return aMatch - bMatch;
+  });
 }
 
 export const EXPERTS_STORAGE_KEY = "@civilhub_cached_experts_v1";
@@ -172,7 +204,7 @@ export async function fetchExpertsFromApi(disciplineFilter = "all") {
         ? `${BACKEND_BASE_URL}/api/experts?discipline=${encodeURIComponent(disciplineFilter)}`
         : `${BACKEND_BASE_URL}/api/experts`;
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
     if (res.ok) {
       const data = await res.json();
       if (data.success && Array.isArray(data.experts) && data.experts.length > 0) {
@@ -200,6 +232,27 @@ export async function fetchExpertsFromApi(disciplineFilter = "all") {
   return getAvailableExperts(disciplineFilter);
 }
 
+// Canonical fixed timestamp for initial room welcome message so it always stays at the top (08:00 AM)
+export const CANONICAL_WELCOME_TIMESTAMP = "2026-09-29T04:00:00.000Z";
+
+/**
+ * Strictly sort chat messages chronologically (oldest at top, newest at bottom).
+ * Initial room greetings (msg_welcome) are guaranteed to precede user inquiries.
+ */
+export function sortMessagesChronologically(messagesList) {
+  if (!Array.isArray(messagesList)) return [];
+  return [...messagesList].sort((a, b) => {
+    const timeA = new Date(a.timestamp || 0).getTime();
+    const timeB = new Date(b.timestamp || 0).getTime();
+    if (timeA !== timeB) return timeA - timeB;
+    const isWelcomeA = a.id?.startsWith("msg_welcome");
+    const isWelcomeB = b.id?.startsWith("msg_welcome");
+    if (isWelcomeA && !isWelcomeB) return -1;
+    if (!isWelcomeA && isWelcomeB) return 1;
+    return 0;
+  });
+}
+
 export function getDefaultWelcomeForThread(threadId) {
   if (threadId === THREAD_AI) {
     return [
@@ -210,7 +263,7 @@ export function getDefaultWelcomeForThread(threadId) {
         engineerType: "ai",
         senderName: AI_SPEC.name,
         text: AI_SPEC.greeting,
-        timestamp: new Date().toISOString(),
+        timestamp: CANONICAL_WELCOME_TIMESTAMP,
         attachedContext: null,
       },
     ];
@@ -226,7 +279,7 @@ export function getDefaultWelcomeForThread(threadId) {
         engineerType: expert.discipline,
         senderName: expert.name,
         text: expert.greeting,
-        timestamp: new Date().toISOString(),
+        timestamp: CANONICAL_WELCOME_TIMESTAMP,
         attachedContext: null,
       },
     ];
@@ -243,37 +296,66 @@ export function getDefaultWelcomeForThread(threadId) {
 }
 
 /**
- * Retrieve chat messages for a specific consultation thread from MySQL.
- * Syncs with local AsyncStorage cache for offline availability.
+ * Retrieve chat messages for a specific consultation thread from backend.
+ * Guarantees strict thread isolation (no cross-thread leaking) and chronological ordering.
  */
 export async function getChatHistory(threadId = THREAD_STRUCTURAL) {
+  if (!threadId) return [];
+
   // For AI thread, use local AsyncStorage
   if (threadId === THREAD_AI) {
     try {
       const raw = await AsyncStorage.getItem(`${CHAT_STORAGE_KEY}_${threadId}`);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const threadOnly = parsed.filter((m) => m.threadId === THREAD_AI || !m.threadId);
+          return sortMessagesChronologically(threadOnly);
+        }
       }
     } catch (_e) {}
     return getDefaultWelcomeForThread(threadId);
   }
 
-  // For Human Consultation threads, query MySQL Backend
+  const welcome = getDefaultWelcomeForThread(threadId)[0];
+
+  // For Human Consultation threads, query Backend
   try {
     const res = await fetch(`${BACKEND_BASE_URL}/api/chat/messages/${encodeURIComponent(threadId)}`, {
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(4000),
     });
     if (res.ok) {
       const data = await res.json();
       if (data.success && Array.isArray(data.messages)) {
-        if (data.messages.length > 0) {
-          await AsyncStorage.setItem(`${CHAT_STORAGE_KEY}_${threadId}`, JSON.stringify(data.messages));
-          return data.messages;
+        // Enforce strict thread isolation: only keep messages belonging to this thread
+        const threadMessages = data.messages.filter((m) => !m.threadId || m.threadId === threadId);
+
+        if (threadMessages.length > 0) {
+          // Prepend default welcome greeting if not already in message list
+          const hasWelcome = threadMessages.some(
+            (m) => m.id === welcome.id || (m.senderRole === "engineer" && m.text === welcome.text)
+          );
+          const fullHistory = hasWelcome ? threadMessages : [welcome, ...threadMessages];
+          const sorted = sortMessagesChronologically(fullHistory);
+
+          await AsyncStorage.setItem(`${CHAT_STORAGE_KEY}_${threadId}`, JSON.stringify(sorted));
+          return sorted;
         } else {
-          // Database has 0 messages (cleared): clear local cache and return default welcome
-          await AsyncStorage.removeItem(`${CHAT_STORAGE_KEY}_${threadId}`);
-          return getDefaultWelcomeForThread(threadId);
+          // Backend returned 0 messages: check local cache strictly for this thread
+          try {
+            const rawCached = await AsyncStorage.getItem(`${CHAT_STORAGE_KEY}_${threadId}`);
+            if (rawCached) {
+              const parsed = JSON.parse(rawCached);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                const threadOnly = parsed.filter((m) => m.threadId === threadId);
+                if (threadOnly.length > 0) {
+                  return sortMessagesChronologically(threadOnly);
+                }
+              }
+            }
+          } catch (_e) {}
+
+          return [welcome];
         }
       }
     }
@@ -281,12 +363,17 @@ export async function getChatHistory(threadId = THREAD_STRUCTURAL) {
     console.warn("[Chat History API] Network fetch failed, using local cache:", err.message);
   }
 
-  // Cache fallback
+  // Cache fallback with strict thread filtering
   try {
     const raw = await AsyncStorage.getItem(`${CHAT_STORAGE_KEY}_${threadId}`);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const threadOnly = parsed.filter((m) => m.threadId === threadId);
+        if (threadOnly.length > 0) {
+          return sortMessagesChronologically(threadOnly);
+        }
+      }
     }
   } catch (_e) {}
 
@@ -294,11 +381,14 @@ export async function getChatHistory(threadId = THREAD_STRUCTURAL) {
 }
 
 /**
- * Append a single message to persistent chat history in MySQL and local cache.
+ * Append a single message to persistent chat history in backend AND local cache.
  */
 export async function appendChatMessage(messagePayload, threadId = THREAD_STRUCTURAL) {
   if (!messagePayload || !messagePayload.text || !messagePayload.text.trim()) {
     throw new Error("Cannot append an empty message.");
+  }
+  if (!threadId) {
+    throw new Error("Cannot append message without active threadId.");
   }
 
   const senderRole = messagePayload.senderRole || "client";
@@ -308,7 +398,8 @@ export async function appendChatMessage(messagePayload, threadId = THREAD_STRUCT
   else if (senderRole === "engineer") fallbackSenderName = "Engineer";
 
   const cleanText = messagePayload.text.trim();
-  const msgId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+  const msgId = messagePayload.id || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+  const now = new Date().toISOString();
 
   const messageToSave = {
     id: msgId,
@@ -317,11 +408,25 @@ export async function appendChatMessage(messagePayload, threadId = THREAD_STRUCT
     engineerType: messagePayload.engineerType || null,
     senderName: messagePayload.senderName || fallbackSenderName,
     text: cleanText,
-    timestamp: new Date().toISOString(),
+    timestamp: now,
     attachedContext: messagePayload.attachedContext || null,
   };
 
-  // Try saving to MySQL Backend
+  // 1. Immediately save to local AsyncStorage cache so UI updates reliably without delay
+  try {
+    const rawCached = await AsyncStorage.getItem(`${CHAT_STORAGE_KEY}_${threadId}`);
+    const existing = rawCached
+      ? JSON.parse(rawCached).filter((m) => m.threadId === threadId)
+      : getDefaultWelcomeForThread(threadId);
+    if (!existing.some((m) => m.id === messageToSave.id)) {
+      const updated = sortMessagesChronologically([...existing, messageToSave]);
+      await AsyncStorage.setItem(`${CHAT_STORAGE_KEY}_${threadId}`, JSON.stringify(updated));
+    }
+  } catch (err) {
+    console.warn("Failed to persist message to AsyncStorage:", err);
+  }
+
+  // 2. Persist to Backend server (POST)
   if (threadId !== THREAD_AI) {
     try {
       await fetch(`${BACKEND_BASE_URL}/api/chat/messages`, {
@@ -331,26 +436,19 @@ export async function appendChatMessage(messagePayload, threadId = THREAD_STRUCT
         signal: AbortSignal.timeout(5000),
       });
     } catch (err) {
-      console.warn("[Append Chat API] Backend save failed, saving to local cache:", err.message);
+      console.warn("[Append Chat API] Backend save failed, stored in local cache:", err.message);
     }
-  }
-
-  // Always sync local AsyncStorage cache
-  try {
-    const existing = await getChatHistory(threadId);
-    const updated = [...existing, messageToSave];
-    await AsyncStorage.setItem(`${CHAT_STORAGE_KEY}_${threadId}`, JSON.stringify(updated));
-  } catch (err) {
-    console.warn("Failed to persist message to AsyncStorage:", err);
   }
 
   return messageToSave;
 }
 
 /**
- * Clear chat history for a thread back to initial welcome message in MySQL and local cache.
+ * Clear chat history for a thread back to initial welcome message in backend and local cache.
  */
 export async function clearChatHistory(threadId = THREAD_STRUCTURAL) {
+  if (!threadId) return [];
+
   if (threadId !== THREAD_AI) {
     try {
       await fetch(`${BACKEND_BASE_URL}/api/chat/messages/${encodeURIComponent(threadId)}`, {
@@ -370,6 +468,8 @@ export async function clearChatHistory(threadId = THREAD_STRUCTURAL) {
 
   return getDefaultWelcomeForThread(threadId);
 }
+
+
 
 /**
  * Discipline-tailored engineering advice generator
@@ -509,6 +609,7 @@ export async function queryAiExpert(userPrompt, activeContext = null) {
   const enrichedPrompt = `${contextHeader}${trimmedPrompt}`;
 
   let answerText = "";
+  let requestError = null;
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -523,13 +624,30 @@ export async function queryAiExpert(userPrompt, activeContext = null) {
     clearTimeout(timeoutId);
 
     const data = await res.json().catch(() => ({}));
-    if (res.ok && data && data.answer) {
-      answerText = data.answer;
-    } else {
-      throw new Error(data?.error || "Gemini could not generate a response.");
+    if (!res.ok) {
+      throw new Error(data.error || `AI service error (${res.status}).`);
     }
-  } catch (_netErr) {
-    throw new Error("Gemini service is unavailable. Please check the backend and try again.");
+    if (data && data.answer) {
+      answerText = data.answer;
+    }
+  } catch (error) {
+    requestError = error;
+  }
+
+  // Local BNBC expert engine fallback
+  if (!answerText) {
+    try {
+      answerText = generateBnbcExpertAnswer(trimmedPrompt, activeContext) || "";
+    } catch (_fallbackErr) {
+      // ignore
+    }
+  }
+
+  if (!answerText) {
+    throw new Error(
+      requestError?.message ||
+        "The assistant could not answer this question. Please try again later."
+    );
   }
 
   return {
