@@ -136,11 +136,7 @@ export default function ExpertDirectoryModal({
 
         {/* Specialty Filter Chips */}
         <View style={styles.filterRow}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterChipsContainer}
-          >
+          <View style={styles.filterChipsContainer}>
             {SPECIALTY_FILTERS.map((item) => (
               <TouchableOpacity
                 key={item.id}
@@ -160,7 +156,7 @@ export default function ExpertDirectoryModal({
                 </Text>
               </TouchableOpacity>
             ))}
-          </ScrollView>
+          </View>
         </View>
 
         {/* Engineers List */}
@@ -305,6 +301,8 @@ const styles = StyleSheet.create({
   },
   filterChipsContainer: {
     paddingHorizontal: 16,
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
   filterChip: {
