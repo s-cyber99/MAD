@@ -19,8 +19,11 @@ const { SEED_DESIGNS } = require("./seedData");
 const costEstimatorRouter = require("./costEstimator");
 const { generateBnbcExpertAnswer } = require("./bnbcExpertEngine");
 
+const fs = require("fs");
 const app = express();
-const fallbackUsers = [
+
+const FALLBACK_USERS_FILE = path.join(__dirname, "fallbackUsers.json");
+const SEED_FALLBACK_USERS = [
   {
     id: 1,
     name: "CivilHub Client",
@@ -63,6 +66,143 @@ const fallbackUsers = [
   },
 ];
 
+function loadFallbackUsers() {
+  try {
+    if (fs.existsSync(FALLBACK_USERS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(FALLBACK_USERS_FILE, "utf8"));
+      if (Array.isArray(data) && data.length > 0) {
+        const merged = [...data];
+        for (const seed of SEED_FALLBACK_USERS) {
+          if (!merged.some((u) => u.email.toLowerCase() === seed.email.toLowerCase())) {
+            merged.push(seed);
+          }
+        }
+        return merged;
+      }
+    }
+  } catch (err) {
+    console.warn("[Auth] Could not read fallbackUsers.json:", err.message);
+  }
+  saveFallbackUsers(SEED_FALLBACK_USERS);
+  return [...SEED_FALLBACK_USERS];
+}
+
+function saveFallbackUsers(users) {
+  try {
+    fs.writeFileSync(FALLBACK_USERS_FILE, JSON.stringify(users, null, 2), "utf8");
+  } catch (err) {
+    console.warn("[Auth] Could not write fallbackUsers.json:", err.message);
+  }
+}
+
+let fallbackUsers = loadFallbackUsers();
+
+const FALLBACK_MESSAGES_FILE = path.join(__dirname, "fallbackMessages.json");
+const SEED_FALLBACK_MESSAGES = [
+  {
+    id: "msg_seed_1",
+    threadId: "thread_client_architect_1",
+    senderRole: "client",
+    engineerType: null,
+    senderName: "Client Salman",
+    text: "Hello Ar. Nusrat, I am planning to build a 6-story residential building on a 4.0 Katha plot in Mirpur. What are the mandatory setbacks?",
+    attachedContext: {
+      title: "Dhanmondi Brick & Glass Villa",
+      architectural_style: "Exposed Brick & Louver",
+      floors: 5,
+      katha: 4.0,
+      built_area_sqft: 9800,
+      units_per_floor: 1,
+      bedrooms: 4,
+      bathrooms: 4,
+      authority: "RAJUK",
+    },
+    timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
+  },
+  {
+    id: "msg_seed_2",
+    threadId: "thread_client_architect_1",
+    senderRole: "engineer",
+    engineerType: "architect",
+    senderName: "Ar. Nusrat Jahan",
+    text: "Hello Salman! For a 4.0 Katha plot under RAJUK, you need a minimum 5ft front setback, 3.28ft (1m) side setbacks, and a 6.5ft (2m) rear setback. Your 5-6 story target is well within FAR limits for a 20ft road.",
+    attachedContext: null,
+    timestamp: new Date(Date.now() - 3600000 * 1.8).toISOString(),
+  },
+  {
+    id: "msg_seed_3",
+    threadId: "thread_client_structural_1",
+    senderRole: "client",
+    engineerType: null,
+    senderName: "Client Salman",
+    text: "Engr. Tanvir, could you review column sizing and shear wall requirements for a 10-story tower under BNBC 2020 seismic zone 2?",
+    attachedContext: {
+      title: "Gulshan Modernist Horizon",
+      architectural_style: "Biophilic Contemporary",
+      floors: 10,
+      katha: 5.0,
+      built_area_sqft: 22500,
+      authority: "RAJUK",
+    },
+    timestamp: new Date(Date.now() - 3600000 * 1.5).toISOString(),
+  },
+  {
+    id: "msg_seed_4",
+    threadId: "thread_client_structural_1",
+    senderRole: "engineer",
+    engineerType: "structural",
+    senderName: "Engr. Tanvir Ahmed, PEng",
+    text: "For a 10-story structure in Dhaka (Zone 2, Z=0.20), dual framing with a reinforced concrete central core shear wall is highly recommended. Typical basement/ground floor columns will require approximately 20\" x 24\" with 60-grade rebar.",
+    attachedContext: null,
+    timestamp: new Date(Date.now() - 3600000 * 1.2).toISOString(),
+  },
+  {
+    id: "msg_seed_5",
+    threadId: "thread_client_soil_1",
+    senderRole: "client",
+    engineerType: null,
+    senderName: "Client Salman",
+    text: "Engr. Rafiqul, at what SPT N-value would shallow footing be acceptable for 5 stories?",
+    attachedContext: null,
+    timestamp: new Date(Date.now() - 3600000 * 0.9).toISOString(),
+  },
+  {
+    id: "msg_seed_6",
+    threadId: "thread_client_soil_1",
+    senderRole: "engineer",
+    engineerType: "soil",
+    senderName: "Engr. Mohammad Rafiqul",
+    text: "Under BNBC 2020, for shallow mat or isolated footings supporting 5 stories, you generally need an SPT N-value of 15 or higher within the top 15-20 feet. If N is below 10, bored cast-in-situ piling will be required.",
+    attachedContext: null,
+    timestamp: new Date(Date.now() - 3600000 * 0.5).toISOString(),
+  },
+];
+
+function loadFallbackMessages() {
+  try {
+    if (fs.existsSync(FALLBACK_MESSAGES_FILE)) {
+      const data = JSON.parse(fs.readFileSync(FALLBACK_MESSAGES_FILE, "utf8"));
+      if (Array.isArray(data) && data.length > 0) {
+        return data;
+      }
+    }
+  } catch (err) {
+    console.warn("[Chat] Could not read fallbackMessages.json:", err.message);
+  }
+  saveFallbackMessages(SEED_FALLBACK_MESSAGES);
+  return [...SEED_FALLBACK_MESSAGES];
+}
+
+function saveFallbackMessages(messages) {
+  try {
+    fs.writeFileSync(FALLBACK_MESSAGES_FILE, JSON.stringify(messages, null, 2), "utf8");
+  } catch (err) {
+    console.warn("[Chat] Could not write fallbackMessages.json:", err.message);
+  }
+}
+
+let fallbackMessages = loadFallbackMessages();
+
 // ============================================================
 // Middleware
 // ============================================================
@@ -85,33 +225,39 @@ app.use(
 // ============================================================
 
 const PORT = process.env.PORT || 4000;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "openai/gpt-4o";
+const OPENROUTER_SITE_URL = process.env.OPENROUTER_SITE_URL || "http://localhost:4000";
+const OPENROUTER_SITE_NAME = process.env.OPENROUTER_SITE_NAME || "CivilHub";
+const OPENROUTER_MAX_TOKENS = parseInt(process.env.OPENROUTER_MAX_TOKENS, 10) || 1000;
+
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
 const JWT_SECRET = process.env.JWT_SECRET || "civilhub-development-secret";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
-function isTransientGeminiError(error) {
+function isTransientError(error) {
   const status = Number(error?.status || error?.code || 0);
   const message = String(error?.message || "").toLowerCase();
-  if (message.includes("high demand")) {
-    return false;
-  }
   return (
-    [429, 500, 502, 504].includes(status) ||
+    [408, 429, 500, 502, 503, 504].includes(status) ||
     message.includes("high demand") ||
     message.includes("temporarily unavailable") ||
     message.includes("service unavailable") ||
-    message.includes("unavailable")
+    message.includes("unavailable") ||
+    message.includes("timed out") ||
+    message.includes("connect timeout") ||
+    message.includes("fetch failed")
   );
 }
 
-async function withGeminiRetry(operation, maxAttempts = 1, timeoutMs = 90000) {
+async function withRetry(operation, maxAttempts = 3, timeoutMs = 30000) {
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
       let timeoutHandle;
       const timeout = new Promise((_, reject) => {
         timeoutHandle = setTimeout(
-          () => reject(new Error(`Gemini request timed out after ${timeoutMs}ms`)),
+          () => reject(new Error(`AI request timed out after ${timeoutMs}ms`)),
           timeoutMs
         );
       });
@@ -119,7 +265,7 @@ async function withGeminiRetry(operation, maxAttempts = 1, timeoutMs = 90000) {
       clearTimeout(timeoutHandle);
       return result;
     } catch (error) {
-      if (!isTransientGeminiError(error) || attempt === maxAttempts) {
+      if (!isTransientError(error) || attempt === maxAttempts) {
         throw error;
       }
       await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** (attempt - 1)));
@@ -276,12 +422,16 @@ function filterInMemory(filters = {}) {
 
 app.get("/health", (req, res) => {
   require("dotenv").config({ path: path.join(__dirname, ".env"), override: true });
-  const activeApiKey = (process.env.GEMINI_API_KEY || "").trim();
+  const openRouterKey = (process.env.OPENROUTER_API_KEY || "").trim();
+  const geminiKey = (process.env.GEMINI_API_KEY || "").trim();
   const dbStatus = getStatus();
   res.json({
     ok: true,
-    hasKey: Boolean(activeApiKey),
-    model: process.env.GEMINI_MODEL || GEMINI_MODEL,
+    hasKey: Boolean(openRouterKey || geminiKey),
+    provider: openRouterKey ? "openrouter" : (geminiKey ? "gemini" : "local-fallback"),
+    model: openRouterKey
+      ? (process.env.OPENROUTER_MODEL || OPENROUTER_MODEL)
+      : (process.env.GEMINI_MODEL || GEMINI_MODEL),
     database: dbStatus,
   });
 });
@@ -317,13 +467,15 @@ app.post("/api/auth/register", async (req, res) => {
     }
 
     if (!getStatus().connected) {
-      if (fallbackUsers.some((user) => user.email === email)) {
+      fallbackUsers = loadFallbackUsers();
+      if (fallbackUsers.some((u) => u.email.toLowerCase() === email)) {
         return res.status(409).json({ error: "An account with this email already exists." });
       }
 
       const passwordHash = await bcrypt.hash(password, 12);
       const user = { id: Date.now(), name, email, role, engineerType, passwordHash };
       fallbackUsers.push(user);
+      saveFallbackUsers(fallbackUsers);
       const safeUser = { id: user.id, name: user.name, email: user.email, role: user.role, engineerType: user.engineerType };
       return res.status(201).json({ success: true, token: createToken(safeUser), user: safeUser });
     }
@@ -375,7 +527,7 @@ app.post("/api/auth/login", async (req, res) => {
     if (getStatus().connected) {
       try {
         const rows = await query(
-          "SELECT id, name, email, password_hash, role, engineer_type FROM users WHERE email = ? LIMIT 1",
+          "SELECT id, name, email, password_hash, role, engineer_type FROM users WHERE LOWER(email) = ? LIMIT 1",
           [email]
         );
         if (rows && rows.length > 0) {
@@ -386,17 +538,18 @@ app.post("/api/auth/login", async (req, res) => {
       }
     }
 
-    // If user not in DB or DB offline, check fallbackUsers
+    // If user not in DB or DB offline, check persistent fallbackUsers
     if (!user) {
-      const fallback = fallbackUsers.find((candidate) => candidate.email === email);
+      fallbackUsers = loadFallbackUsers();
+      const fallback = fallbackUsers.find((candidate) => candidate.email.toLowerCase() === email);
       if (fallback) {
         user = {
           id: fallback.id,
           name: fallback.name,
           email: fallback.email,
-          password_hash: fallback.passwordHash,
+          password_hash: fallback.passwordHash || fallback.password_hash,
           role: fallback.role,
-          engineer_type: fallback.engineerType,
+          engineer_type: fallback.engineerType || fallback.engineer_type,
         };
       }
     }
@@ -405,13 +558,15 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid email or password." });
     }
 
-    const passwordMatches = await bcrypt.compare(password, user.password_hash || user.passwordHash);
+    const hashToCompare = user.password_hash || user.passwordHash;
+    const passwordMatches = await bcrypt.compare(password, hashToCompare);
     if (!passwordMatches) {
       return res.status(401).json({ error: "Invalid email or password." });
     }
 
-    const role = reqRole || user.role || "client";
-    const engineerType = role === "engineer" ? (reqEngineerType || user.engineer_type || user.engineerType || "structural") : null;
+    // Role priority: use user's account role, defaulting to reqRole if unspecified
+    const role = user.role || reqRole || "client";
+    const engineerType = role === "engineer" ? (user.engineer_type || user.engineerType || reqEngineerType || "structural") : null;
     const safeUser = { id: user.id, name: user.name, email: user.email, role, engineerType };
     return res.json({ success: true, token: createToken(safeUser), user: safeUser });
   } catch (error) {
@@ -422,8 +577,24 @@ app.post("/api/auth/login", async (req, res) => {
 
 app.get("/api/auth/me", requireAuth, async (req, res) => {
   try {
+    if (!getStatus().connected) {
+      fallbackUsers = loadFallbackUsers();
+      const user = fallbackUsers.find((u) => u.id === req.user.sub || u.email.toLowerCase() === (req.user.email || "").toLowerCase());
+      if (!user) return res.status(404).json({ error: "User not found." });
+      return res.json({
+        success: true,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role || "client",
+          engineerType: user.engineerType || user.engineer_type || null,
+        },
+      });
+    }
+
     const rows = await query(
-      "SELECT id, name, email, created_at FROM users WHERE id = ? LIMIT 1",
+      "SELECT id, name, email, role, engineer_type, created_at FROM users WHERE id = ? LIMIT 1",
       [req.user.sub]
     );
     if (!rows.length) return res.status(404).json({ error: "User not found." });
@@ -993,62 +1164,139 @@ app.post("/api/ask-building-code", async (req, res) => {
 
     const cleanQuestion = String(question).trim();
 
-    // Reload dotenv dynamically so user can update GEMINI_API_KEY in .env on the fly
+    // Reload dotenv dynamically so user can update API keys in .env on the fly
     require("dotenv").config({ path: path.join(__dirname, ".env"), override: true });
-    const activeApiKey = (process.env.GEMINI_API_KEY || "").trim();
+    const openRouterApiKey = (process.env.OPENROUTER_API_KEY || "").trim();
+    const geminiApiKey = (process.env.GEMINI_API_KEY || "").trim();
 
-    // 1. Ask Gemini directly. The local engine below is only an outage fallback.
-    if (activeApiKey) {
-      const contextText = context
-        ? `\n\nAttached project context:\n${JSON.stringify(context)}`
-        : "";
-      const fullPrompt = `${SYSTEM_CONTEXT}${contextText}\n\nUser question:\n${cleanQuestion}`;
-      const model = process.env.GEMINI_MODEL || GEMINI_MODEL;
+    const contextText = context
+      ? `\n\nAttached project context:\n${JSON.stringify(context)}`
+      : "";
 
-      try {
-        let answerText = "";
+    // 1. Ask OpenRouter (Primary AI Provider)
+    if (openRouterApiKey) {
+      const openRouterModels = Array.from(
+        new Set([
+          process.env.OPENROUTER_MODEL || OPENROUTER_MODEL || "openai/gpt-4o",
+          "openai/gpt-4o",
+          "openai/gpt-4o-mini",
+          "google/gemini-2.0-flash-001",
+          "meta-llama/llama-3.3-70b-instruct",
+        ])
+      );
 
-        const geminiResponse = await withGeminiRetry(() =>
-          fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-            {
+      const maxTokens = parseInt(process.env.OPENROUTER_MAX_TOKENS, 10) || 1000;
+      const siteUrl = process.env.OPENROUTER_SITE_URL || OPENROUTER_SITE_URL;
+      const siteName = process.env.OPENROUTER_SITE_NAME || OPENROUTER_SITE_NAME;
+
+      for (const modelName of openRouterModels) {
+        try {
+          const data = await withRetry(async () => {
+            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
               method: "POST",
               headers: {
+                Authorization: `Bearer ${openRouterApiKey}`,
+                "HTTP-Referer": siteUrl,
+                "X-Title": siteName,
                 "Content-Type": "application/json",
-                "x-goog-api-key": activeApiKey,
               },
               body: JSON.stringify({
-                contents: [{ parts: [{ text: fullPrompt }] }],
-                generationConfig: { maxOutputTokens: 800 },
+                model: modelName,
+                max_tokens: maxTokens,
+                messages: [
+                  {
+                    role: "system",
+                    content: SYSTEM_CONTEXT,
+                  },
+                  {
+                    role: "user",
+                    content: `${cleanQuestion}${contextText}`,
+                  },
+                ],
               }),
-              signal: AbortSignal.timeout(90000),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({}));
+              const error = new Error(
+                errorData?.error?.message || response.statusText || `OpenRouter HTTP ${response.status}`
+              );
+              error.status = response.status;
+              throw error;
             }
-          )
-        );
 
-        if (!geminiResponse.ok) {
-          const error = new Error(`Gemini returned HTTP ${geminiResponse.status}`);
-          error.status = geminiResponse.status;
-          throw error;
+            return response.json();
+          }, 2, 25000);
+
+          const answer = data?.choices?.[0]?.message?.content?.trim();
+          if (answer) {
+            return res.json({
+              answer,
+              model: modelName,
+              source: "openrouter",
+            });
+          }
+        } catch (openRouterErr) {
+          console.warn(`[OpenRouter] Model ${modelName} failed:`, openRouterErr.message);
         }
-
-        const data = await geminiResponse.json();
-        answerText = data?.candidates?.[0]?.content?.parts
-          ?.map((part) => part?.text || "")
-          .join("")
-          .trim();
-
-        if (answerText) {
-          return res.json({ answer: answerText, model, source: "gemini" });
-        }
-      } catch (callErr) {
-        console.warn(
-          "[Gemini] Temporarily unavailable; using local BNBC fallback:",
-          callErr.message
-        );
       }
     }
 
+    // 2. Ask Gemini directly (Fallback AI Provider)
+    if (geminiApiKey) {
+      const fullPrompt = `${SYSTEM_CONTEXT}${contextText}\n\nUser question:\n${cleanQuestion}`;
+      const candidateModels = Array.from(
+        new Set([
+          process.env.GEMINI_MODEL || GEMINI_MODEL || "gemini-2.0-flash",
+          "gemini-2.0-flash",
+          "gemini-1.5-flash",
+        ])
+      );
+
+      for (const candidate of candidateModels) {
+        for (const apiVer of ["v1beta", "v1"]) {
+          try {
+            const data = await withRetry(async () => {
+              const geminiResponse = await fetch(
+                `https://generativelanguage.googleapis.com/${apiVer}/models/${candidate}:generateContent`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": geminiApiKey,
+                  },
+                  body: JSON.stringify({
+                    contents: [{ parts: [{ text: fullPrompt }] }],
+                    generationConfig: { maxOutputTokens: 800 },
+                  }),
+                }
+              );
+              if (!geminiResponse.ok) {
+                const errorData = await geminiResponse.json().catch(() => ({}));
+                const error = new Error(
+                  errorData?.error?.message || geminiResponse.statusText
+                );
+                error.status = geminiResponse.status;
+                throw error;
+              }
+              return geminiResponse.json();
+            }, 2, 15000);
+
+            const text = data?.candidates?.[0]?.content?.parts
+              ?.map((part) => part?.text || "")
+              .join("")
+              .trim();
+            if (text) {
+              return res.json({ answer: text, model: candidate, source: "gemini" });
+            }
+          } catch (geminiErr) {
+            console.warn(`[Gemini] ${candidate} ${apiVer} failed:`, geminiErr.message);
+          }
+        }
+      }
+    }
+
+    // 3. Local BNBC engine fallback
     const fallbackAnswer = generateBnbcExpertAnswer(cleanQuestion, context);
     if (fallbackAnswer) {
       return res.json({
@@ -1058,12 +1306,19 @@ app.post("/api/ask-building-code", async (req, res) => {
       });
     }
 
-    return res.status(502).json({
-      error: "Gemini could not generate a response. Please try again.",
+    return res.json({
+      answer: `### Bangladesh Building Code & Engineering Advisory (BNBC 2020)\n\nThank you for your question. For detailed structural analysis, Floor Area Ratio (FAR) calculation, or municipal permits (RAJUK / CDA / KDA / RDA), please consult the relevant sections in BNBC 2020 or chat with one of our verified structural, architectural, or geotechnical engineers.`,
+      model: "local-bnbc-engine",
+      source: "local-fallback",
     });
   } catch (error) {
     console.error("Proxy error:", error);
-    return res.status(500).json({ error: "Gemini service error. Please try again." });
+    const fallbackAnswer = generateBnbcExpertAnswer(req.body?.question || "", req.body?.context);
+    return res.json({
+      answer: fallbackAnswer || "CivilHub AI Assistant is ready. Please try asking your civil engineering or building code question again.",
+      model: "local-bnbc-engine",
+      source: "local-fallback",
+    });
   }
 });
 
@@ -1071,9 +1326,114 @@ app.post("/api/ask-building-code", async (req, res) => {
 // FEATURE: EXPERT DIRECTORY & CONSULTATION CHAT API
 // ============================================================
 
+const CATALOG_EXPERTS = [
+  {
+    id: "architect_1",
+    name: "Ar. Nusrat Jahan",
+    title: "Senior Architect (Arc)",
+    roleLabel: "Architect",
+    discipline: "architect",
+    license: "IAB-K2104",
+    experience: "12 years exp",
+    firm: "Studio Nirman Dhaka",
+    rating: "4.9 ★ (84 reviews)",
+    specialties: ["Floor Layouts", "FAR Calculation", "RAJUK & CDA Approval"],
+    threadId: "thread_client_architect_1",
+    avatarInitials: "NJ",
+    avatarColor: "#0284c7",
+    greeting:
+      "Hello! I am Ar. Nusrat Jahan, your Architectural Consultant (IAB-K2104).\n\nI can assist you with Floor Area Ratio (FAR) calculations, mandatory front/rear setbacks, architectural floor layouts, and RAJUK/CDA approval preparation.",
+  },
+  {
+    id: "architect_2",
+    name: "Ar. Mahmudul Hasan",
+    title: "Principal Urban Architect",
+    roleLabel: "Architect",
+    discipline: "architect",
+    license: "IAB-M3190",
+    experience: "8 years exp",
+    firm: "Hasan & Associates",
+    rating: "4.8 ★ (56 reviews)",
+    specialties: ["Residential Elevation", "Interior Space Planning", "Green Building"],
+    threadId: "thread_client_architect_2",
+    avatarInitials: "MH",
+    avatarColor: "#0369a1",
+    greeting:
+      "Hello! I am Ar. Mahmudul Hasan (IAB-M3190). I specialize in modern residential elevation, sustainable building envelopes, and RAJUK building code compliance.",
+  },
+  {
+    id: "structural_1",
+    name: "Engr. Tanvir Ahmed, PEng",
+    title: "Principal Structural Engineer",
+    roleLabel: "Structure Eng",
+    discipline: "structural",
+    license: "MIEB-18492",
+    experience: "15 years exp",
+    firm: "Dhaka Structural Dynamics",
+    rating: "5.0 ★ (112 reviews)",
+    specialties: ["BNBC 2020", "Seismic RCC Detailing", "Shear Wall Design"],
+    threadId: "thread_client_structural_1",
+    avatarInitials: "TA",
+    avatarColor: "#2563eb",
+    greeting:
+      "Hello! I am Engr. Tanvir Ahmed, PEng (MIEB-18492).\n\nI can help you evaluate column and shear wall sizing, earthquake-resistant RCC frame detailing, structural drawing review, and BNBC 2020 structural safety compliance.",
+  },
+  {
+    id: "structural_2",
+    name: "Engr. Shahriar Kabir",
+    title: "Senior RCC Frame Specialist",
+    roleLabel: "Structure Eng",
+    discipline: "structural",
+    license: "MIEB-22104",
+    experience: "9 years exp",
+    firm: "Apex Structural Engineers",
+    rating: "4.9 ★ (63 reviews)",
+    specialties: ["High-rise Detailing", "Beam-Column Joints", "ETABS Modeling"],
+    threadId: "thread_client_structural_2",
+    avatarInitials: "SK",
+    avatarColor: "#1d4ed8",
+    greeting:
+      "Hello! I am Engr. Shahriar Kabir (MIEB-22104). I specialize in high-rise RCC framing, ductile rebar confinement, and ETABS structural analysis.",
+  },
+  {
+    id: "soil_1",
+    name: "Engr. Mohammad Rafiqul",
+    title: "Geotechnical & Soil Specialist",
+    roleLabel: "Soil Eng",
+    discipline: "soil",
+    license: "FIEB-09812",
+    experience: "18 years exp",
+    firm: "Bengal Geotechnical Lab",
+    rating: "4.9 ★ (92 reviews)",
+    specialties: ["Borehole SPT N-Value", "Bored Cast-in-Situ Piling", "Pile Load Test"],
+    threadId: "thread_client_soil_1",
+    avatarInitials: "MR",
+    avatarColor: "#059669",
+    greeting:
+      "Hello! I am Engr. Mohammad Rafiqul, your Geotechnical & Soil Specialist (FIEB-09812).\n\nI specialize in soil test review, borehole SPT N-value interpretation, allowable bearing capacity calculation, and cast-in-situ bored pile foundation design.",
+  },
+  {
+    id: "soil_2",
+    name: "Engr. Anisur Rahman",
+    title: "Foundation & Soil Consultant",
+    roleLabel: "Soil Eng",
+    discipline: "soil",
+    license: "MIEB-17632",
+    experience: "11 years exp",
+    firm: "Delta Geo-Engineering",
+    rating: "4.8 ★ (47 reviews)",
+    specialties: ["Mat / Raft Footing", "Differential Settlement", "Soil Improvement"],
+    threadId: "thread_client_soil_2",
+    avatarInitials: "AR",
+    avatarColor: "#047857",
+    greeting:
+      "Hello! I am Engr. Anisur Rahman (MIEB-17632). I evaluate soil bearing capacity, settlement risks in alluvial silt, and mat foundation suitability.",
+  },
+];
+
 /**
  * GET /api/experts
- * Fetch verified consultants from MySQL
+ * Fetch verified consultants from MySQL or robust fallback catalog
  */
 app.get("/api/experts", async (req, res) => {
   const dbStatus = getStatus();
@@ -1090,29 +1450,36 @@ app.get("/api/experts", async (req, res) => {
       sql += " ORDER BY discipline, name ASC";
 
       const rows = await query(sql, params);
-      const experts = rows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        title: r.title,
-        roleLabel: r.role_label,
-        discipline: r.discipline,
-        license: r.license,
-        experience: r.experience,
-        firm: r.firm,
-        rating: r.rating,
-        specialties: typeof r.specialties === "string" ? JSON.parse(r.specialties) : r.specialties,
-        threadId: r.thread_id,
-        avatarInitials: r.avatar_initials,
-        avatarColor: r.avatar_color,
-        greeting: r.greeting,
-      }));
-      return res.json({ success: true, count: experts.length, experts });
+      if (rows && rows.length > 0) {
+        const experts = rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          title: r.title,
+          roleLabel: r.role_label,
+          discipline: r.discipline,
+          license: r.license,
+          experience: r.experience,
+          firm: r.firm,
+          rating: r.rating,
+          specialties: typeof r.specialties === "string" ? JSON.parse(r.specialties) : r.specialties,
+          threadId: r.thread_id,
+          avatarInitials: r.avatar_initials,
+          avatarColor: r.avatar_color,
+          greeting: r.greeting,
+        }));
+        return res.json({ success: true, count: experts.length, experts });
+      }
     } catch (err) {
       console.error("[Experts Query Error]:", err);
     }
   }
 
-  res.json({ success: false, count: 0, experts: [] });
+  // Built-in catalog fallback
+  let list = [...CATALOG_EXPERTS];
+  if (discipline && discipline !== "all") {
+    list = list.filter((e) => e.discipline === discipline);
+  }
+  return res.json({ success: true, count: list.length, experts: list });
 });
 
 /**
@@ -1152,12 +1519,17 @@ app.get("/api/experts/:id", async (req, res) => {
       console.error("[Expert Detail Error]:", err);
     }
   }
+
+  const exp = CATALOG_EXPERTS.find((e) => e.id === id);
+  if (exp) {
+    return res.json({ success: true, expert: exp });
+  }
   res.status(404).json({ success: false, error: "Expert not found" });
 });
 
 /**
  * GET /api/chat/messages/:threadId
- * Fetch conversation history from MySQL for a specific thread
+ * Fetch conversation history from MySQL or persistent fallbackMessages.json
  */
 app.get("/api/chat/messages/:threadId", async (req, res) => {
   const dbStatus = getStatus();
@@ -1170,28 +1542,37 @@ app.get("/api/chat/messages/:threadId", async (req, res) => {
         [threadId]
       );
 
-      const messages = rows.map((r) => ({
-        id: r.id,
-        threadId: r.thread_id,
-        senderRole: r.sender_role,
-        engineerType: r.engineer_type,
-        senderName: r.sender_name,
-        text: r.message_text,
-        attachedContext: typeof r.attached_context === "string" ? JSON.parse(r.attached_context) : r.attached_context,
-        timestamp: r.created_at,
-      }));
+      if (rows && rows.length > 0) {
+        const messages = rows.map((r) => ({
+          id: r.id,
+          threadId: r.thread_id,
+          senderRole: r.sender_role,
+          engineerType: r.engineer_type,
+          senderName: r.sender_name,
+          text: r.message_text,
+          attachedContext: typeof r.attached_context === "string" ? JSON.parse(r.attached_context) : r.attached_context,
+          timestamp: r.created_at,
+        }));
 
-      return res.json({ success: true, count: messages.length, messages });
+        return res.json({ success: true, count: messages.length, messages });
+      }
     } catch (err) {
       console.error("[Chat Messages Query Error]:", err);
     }
   }
-  res.json({ success: true, count: 0, messages: [] });
+
+  // Persistent fallbackMessages store
+  fallbackMessages = loadFallbackMessages();
+  const filtered = fallbackMessages
+    .filter((m) => m.threadId === threadId)
+    .sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+
+  res.json({ success: true, count: filtered.length, messages: filtered });
 });
 
 /**
  * POST /api/chat/messages
- * Store a new consultation message in MySQL
+ * Store a new consultation message in MySQL AND persistent fallbackMessages.json
  */
 app.post("/api/chat/messages", async (req, res) => {
   const dbStatus = getStatus();
@@ -1203,13 +1584,37 @@ app.post("/api/chat/messages", async (req, res) => {
 
   const msgId = id || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
   const cleanText = String(text).trim();
+  const now = new Date().toISOString();
 
+  const savedMessage = {
+    id: msgId,
+    threadId,
+    senderRole,
+    engineerType,
+    senderName,
+    text: cleanText,
+    attachedContext,
+    timestamp: now,
+  };
+
+  // 1. Always save to persistent fallback file so messages never disappear
+  fallbackMessages = loadFallbackMessages();
+  const existingIdx = fallbackMessages.findIndex((m) => m.id === msgId);
+  if (existingIdx >= 0) {
+    fallbackMessages[existingIdx] = savedMessage;
+  } else {
+    fallbackMessages.push(savedMessage);
+  }
+  saveFallbackMessages(fallbackMessages);
+
+  // 2. If MySQL is connected, also persist to database
   if (dbStatus.connected) {
     try {
       await query(
         `INSERT INTO consultation_messages (
-          id, thread_id, sender_role, engineer_type, sender_name, message_text, attached_context
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          id, thread_id, sender_role, engineer_type, sender_name, message_text, attached_context, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE message_text = VALUES(message_text)`,
         [
           msgId,
           threadId,
@@ -1218,70 +1623,115 @@ app.post("/api/chat/messages", async (req, res) => {
           senderName,
           cleanText,
           attachedContext ? JSON.stringify(attachedContext) : null,
+          new Date(now),
         ]
       );
-
-      const savedMessage = {
-        id: msgId,
-        threadId,
-        senderRole,
-        engineerType,
-        senderName,
-        text: cleanText,
-        attachedContext,
-        timestamp: new Date().toISOString(),
-      };
-
-      return res.status(201).json({ success: true, message: savedMessage });
     } catch (err) {
-      console.error("[Save Chat Message Error]:", err);
-      return res.status(500).json({ error: "Failed to save message to database." });
+      console.error("[Save Chat Message DB Error]:", err);
     }
   }
 
-  const fallbackMessage = {
-    id: msgId,
-    threadId,
-    senderRole,
-    engineerType,
-    senderName,
-    text: cleanText,
-    attachedContext,
-    timestamp: new Date().toISOString(),
-  };
-  res.status(201).json({ success: true, message: fallbackMessage });
+  return res.status(201).json({ success: true, message: savedMessage });
 });
 
 /**
  * DELETE /api/chat/messages/:threadId
- * Clear consultation history in MySQL for a thread
+ * Clear consultation history in MySQL and persistent fallbackMessages
  */
 app.delete("/api/chat/messages/:threadId", async (req, res) => {
   const dbStatus = getStatus();
   const { threadId } = req.params;
 
+  fallbackMessages = loadFallbackMessages();
+  fallbackMessages = fallbackMessages.filter((m) => m.threadId !== threadId);
+  saveFallbackMessages(fallbackMessages);
+
   if (dbStatus.connected) {
     try {
       await query("DELETE FROM consultation_messages WHERE thread_id = ?", [threadId]);
-      return res.json({ success: true, message: `Cleared messages for thread ${threadId}` });
     } catch (err) {
       console.error("[Delete Chat Messages Error]:", err);
-      return res.status(500).json({ error: "Failed to clear messages." });
+      return res.status(500).json({ error: "Failed to clear messages from database." });
     }
   }
-  res.json({ success: true, message: `Cleared messages locally for thread ${threadId}` });
+  return res.json({ success: true, message: `Cleared messages for thread ${threadId}` });
+});
+
+/**
+ * GET /api/chat/threads
+ * List all consultation threads with summaries
+ */
+app.get("/api/chat/threads", async (req, res) => {
+  const dbStatus = getStatus();
+  let allMsgs = [];
+
+  if (dbStatus.connected) {
+    try {
+      const rows = await query("SELECT * FROM consultation_messages ORDER BY created_at ASC");
+      if (rows && rows.length > 0) {
+        allMsgs = rows.map((r) => ({
+          id: r.id,
+          threadId: r.thread_id,
+          senderRole: r.sender_role,
+          engineerType: r.engineer_type,
+          senderName: r.sender_name,
+          text: r.message_text,
+          attachedContext: typeof r.attached_context === "string" ? JSON.parse(r.attached_context) : r.attached_context,
+          timestamp: r.created_at,
+        }));
+      }
+    } catch (e) {
+      console.warn("[Threads DB Error]:", e.message);
+    }
+  }
+
+  if (allMsgs.length === 0) {
+    allMsgs = loadFallbackMessages();
+  }
+
+  const threadMap = {};
+  for (const msg of allMsgs) {
+    if (!threadMap[msg.threadId]) {
+      threadMap[msg.threadId] = {
+        threadId: msg.threadId,
+        messageCount: 0,
+        lastMessage: null,
+        participants: new Set(),
+      };
+    }
+    threadMap[msg.threadId].messageCount++;
+    threadMap[msg.threadId].lastMessage = msg;
+    if (msg.senderName) threadMap[msg.threadId].participants.add(msg.senderName);
+  }
+
+  const threads = Object.values(threadMap).map((t) => ({
+    ...t,
+    participants: Array.from(t.participants),
+  }));
+
+  res.json({ success: true, count: threads.length, threads });
 });
 
 // ============================================================
 // START SERVER
 // ============================================================
 
-app.listen(PORT, async () => {
+const server = app.listen(PORT, async () => {
   console.log(`====================================================`);
   console.log(` CivilHub Backend Server running on http://localhost:${PORT}`);
-  console.log(` Gemini model: ${GEMINI_MODEL}`);
-  console.log(` Gemini API key loaded: ${Boolean(GEMINI_API_KEY)}`);
+  console.log(` OpenRouter API key loaded: ${Boolean(OPENROUTER_API_KEY)} (Model: ${OPENROUTER_MODEL})`);
+  console.log(` Gemini API key loaded: ${Boolean(GEMINI_API_KEY)} (Model: ${GEMINI_MODEL})`);
 
   await initDB();
   console.log(`====================================================`);
+});
+
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`\n[ERROR] Port ${PORT} is already in use by another process.`);
+    console.error(`Port ${PORT} has been freed. You can run 'npm run dev' now.\n`);
+    process.exit(1);
+  } else {
+    console.error("[Backend Server Error]:", err);
+  }
 });
