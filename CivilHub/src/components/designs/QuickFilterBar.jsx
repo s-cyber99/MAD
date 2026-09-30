@@ -3,13 +3,14 @@
 // Horizontal scrollable chip bar for 1-tap quick filtering presets.
 // -----------------------------------------------------------------------------
 
-import React from "react";
+import React, { useRef } from "react";
 import {
   ScrollView,
   TouchableOpacity,
   Text,
   StyleSheet,
   View,
+  Platform,
 } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 
@@ -26,11 +27,37 @@ export const QUICK_PRESETS = [
 ];
 
 export default function QuickFilterBar({ activePreset, onSelectPreset }) {
+  const scrollRef = useRef(null);
+  const scrollPos = useRef(0);
+
+  const handleScrollBy = (delta) => {
+    if (scrollRef.current) {
+      const next = Math.max(0, scrollPos.current + delta);
+      scrollRef.current.scrollTo({ x: next, animated: true });
+      scrollPos.current = next;
+    }
+  };
+
   return (
     <View style={styles.container}>
+      <TouchableOpacity
+        style={styles.navArrowBtn}
+        activeOpacity={0.7}
+        onPress={() => handleScrollBy(-220)}
+        accessibilityLabel="Scroll filters left"
+      >
+        <Ionicons name="chevron-back" size={15} color="#2563eb" />
+      </TouchableOpacity>
+
       <ScrollView
+        ref={scrollRef}
         horizontal
-        showsHorizontalScrollIndicator={false}
+        showsHorizontalScrollIndicator={Platform.OS === "web"}
+        style={styles.scrollWrapper}
+        onScroll={(e) => {
+          scrollPos.current = e.nativeEvent.contentOffset.x;
+        }}
+        scrollEventThrottle={16}
         contentContainerStyle={styles.scrollContent}
       >
         {QUICK_PRESETS.map((item) => {
@@ -62,6 +89,15 @@ export default function QuickFilterBar({ activePreset, onSelectPreset }) {
           );
         })}
       </ScrollView>
+
+      <TouchableOpacity
+        style={styles.navArrowBtn}
+        activeOpacity={0.7}
+        onPress={() => handleScrollBy(220)}
+        accessibilityLabel="Scroll filters right"
+      >
+        <Ionicons name="chevron-forward" size={15} color="#2563eb" />
+      </TouchableOpacity>
     </View>
   );
 }
@@ -69,9 +105,33 @@ export default function QuickFilterBar({ activePreset, onSelectPreset }) {
 const styles = StyleSheet.create({
   container: {
     marginVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    gap: 4,
+    width: "100%",
+  },
+  scrollWrapper: {
+    flex: 1,
+    flexShrink: 1,
+  },
+  navArrowBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
   },
   scrollContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 6,
     gap: 8,
   },
   chip: {
