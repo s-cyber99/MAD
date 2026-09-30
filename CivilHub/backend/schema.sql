@@ -84,6 +84,42 @@ CREATE TABLE IF NOT EXISTS users (
     name VARCHAR(100) NOT NULL,
     email VARCHAR(190) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(50) DEFAULT 'client',
+    engineer_type VARCHAR(50) DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+
+-- 5. Table: experts (Verified Consultants Catalog)
+CREATE TABLE IF NOT EXISTS experts (
+    id VARCHAR(50) PRIMARY KEY,
+    name VARCHAR(120) NOT NULL,
+    title VARCHAR(150) NOT NULL,
+    role_label VARCHAR(80) NOT NULL,
+    discipline VARCHAR(50) NOT NULL,
+    license VARCHAR(80) NOT NULL,
+    experience VARCHAR(80) NOT NULL,
+    firm VARCHAR(150) NOT NULL,
+    rating VARCHAR(50) NOT NULL,
+    specialties JSON NOT NULL,
+    thread_id VARCHAR(100) NOT NULL,
+    avatar_initials VARCHAR(10) NOT NULL,
+    avatar_color VARCHAR(20) NOT NULL,
+    greeting TEXT NOT NULL,
+    is_active BOOLEAN DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6. Table: consultation_messages (Human Expert Consultation Chat Messages)
+CREATE TABLE IF NOT EXISTS consultation_messages (
+    id VARCHAR(100) PRIMARY KEY,
+    thread_id VARCHAR(100) NOT NULL,
+    sender_role VARCHAR(50) NOT NULL,
+    engineer_type VARCHAR(50) DEFAULT NULL,
+    sender_name VARCHAR(120) NOT NULL,
+    message_text TEXT NOT NULL,
+    attached_context JSON DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_thread_created (thread_id, created_at)
+);
+
