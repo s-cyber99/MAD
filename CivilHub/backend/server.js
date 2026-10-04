@@ -1,0 +1,1737 @@
+// backend/server.js
+// -----------------------------------------------------------------------------
+// CivilHub Mobile Backend:
+// 1. Feature 1: Gemini AI Bangladesh Building Code Proxy & Feasibility Database
+// 2. Feature 2: Smart Design Suggestions MySQL Filter Engine & CRUD API
+// 3. Feature 3: Interactive Cost Estimator Live Rates & Estimation Logging API
+// -----------------------------------------------------------------------------
+
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
+
+const express = require("express");
+const cors = require("cors");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const { initDB, query, getStatus } = require("./db");
+const { SEED_DESIGNS } = require("./seedData");
+
+const costEstimatorRouter = require("./costEstimator");
+const { generateBnbcExpertAnswer } = require("./bnbcExpertEngine");
+
+const fs = require("fs");
+const app = express();
+
+const FALLBACK_USERS_FILE = path.join(__dirname, "fallbackUsers.json");
+const SEED_FALLBACK_USERS = [
+  {
+    id: 1,
+    name: "CivilHub Client",
+    email: "demo@civilhub.com",
+    role: "client",
+    engineerType: null,
+    passwordHash: bcrypt.hashSync("password123", 10),
+  },
+  {
+    id: 2,
+    name: "Client Salman",
+    email: "salman@civilhub.com",
+    role: "client",
+    engineerType: null,
+    passwordHash: bcrypt.hashSync("password123", 10),
+  },
+  {
+    id: 3,
+    name: "Ar. Nusrat Jahan",
+    email: "arc@civilhub.com",
+    role: "engineer",
+    engineerType: "architect",
+    passwordHash: bcrypt.hashSync("password123", 10),
+  },
+  {
+    id: 4,
+    name: "Engr. Tanvir Ahmed, PEng",
+    email: "structure@civilhub.com",
+    role: "engineer",
+    engineerType: "structural",
+    passwordHash: bcrypt.hashSync("password123", 10),
+  },
+  {
+    id: 5,
+    name: "Engr. Mohammad Rafiqul",
+    email: "soil@civilhub.com",
+    role: "engineer",
+    engineerType: "soil",
+    passwordHash: bcrypt.hashSync("password123", 10),
+  },
+];
+
+function loadFallbackUsers() {
+  try {
+    if (fs.existsSync(FALLBACK_USERS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(FALLBACK_USERS_FILE, "utf8"));
+      if (Array.isArray(data) && data.length > 0) {
+        const merged = [...data];
+        for (const seed of SEED_FALLBACK_USERS) {
+          if (!merged.some((u) => u.email.toLowerCase() === seed.email.toLowerCase())) {
+            merged.push(seed);
+          }
+        }
+        return merged;
+      }
+    }
+  } catch (err) {
+    console.warn("[Auth] Could not read fallbackUsers.json:", err.message);
+  }
+  saveFallbackUsers(SEED_FALLBACK_USERS);
+  return [...SEED_FALLBACK_USERS];
+}
+
+function saveFallbackUsers(users) {
+  try {
+    fs.writeFileSync(FALLBACK_USERS_FILE, JSON.stringify(users, null, 2), "utf8");
+  } catch (err) {
+    console.warn("[Auth] Could not write fallbackUsers.json:", err.message);
+  }
+}
+
+let fallbackUsers = loadFallbackUsers();
+
+const FALLBACK_MESSAGES_FILE = path.join(__dirname, "fallbackMessages.json");
+const SEED_FALLBACK_MESSAGES = [
+  {
+    id: "msg_seed_1",
+    threadId: "thread_client_architect_1",
+    senderRole: "client",
+    engineerType: null,
+    senderName: "Client Salman",
+    text: "Hello Ar. Nusrat, I am planning to build a 6-story residential building on a 4.0 Katha plot in Mirpur. What are the mandatory setbacks?",
+    attachedContext: {
+      title: "Dhanmondi Brick & Glass Villa",
+      architectural_style: "Exposed Brick & Louver",
+      floors: 5,
+      katha: 4.0,
+      built_area_sqft: 9800,
+      units_per_floor: 1,
+      bedrooms: 4,
+      bathrooms: 4,
+      authority: "RAJUK",
+    },
+    timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
+  },
+  {
+    id: "msg_seed_2",
+    threadId: "thread_client_architect_1",
+    senderRole: "engineer",
+    engineerType: "architect",
+    senderName: "Ar. Nusrat Jahan",
+    text: "Hello Salman! For a 4.0 Katha plot under RAJUK, you need a minimum 5ft front setback, 3.28ft (1m) side setbacks, and a 6.5ft (2m) rear setback. Your 5-6 story target is well within FAR limits for a 20ft road.",
+    attachedContext: null,
+    timestamp: new Date(Date.now() - 3600000 * 1.8).toISOString(),
+  },
+  {
+    id: "msg_seed_3",
+    threadId: "thread_client_structural_1",
+    senderRole: "client",
+    engineerType: null,
+    senderName: "Client Salman",
+    text: "Engr. Tanvir, could you review column sizing and shear wall requirements for a 10-story tower under BNBC 2020 seismic zone 2?",
+    attachedContext: {
+      title: "Gulshan Modernist Horizon",
+      architectural_style: "Biophilic Contemporary",
+      floors: 10,
+      katha: 5.0,
+      built_area_sqft: 22500,
+      authority: "RAJUK",
+    },
+    timestamp: new Date(Date.now() - 3600000 * 1.5).toISOString(),
+  },
+  {
+    id: "msg_seed_4",
+    threadId: "thread_client_structural_1",
+    senderRole: "engineer",
+    engineerType: "structural",
+    senderName: "Engr. Tanvir Ahmed, PEng",
+    text: "For a 10-story structure in Dhaka (Zone 2, Z=0.20), dual framing with a reinforced concrete central core shear wall is highly recommended. Typical basement/ground floor columns will require approximately 20\" x 24\" with 60-grade rebar.",
+    attachedContext: null,
+    timestamp: new Date(Date.now() - 3600000 * 1.2).toISOString(),
+  },
+  {
+    id: "msg_seed_5",
+    threadId: "thread_client_soil_1",
+    senderRole: "client",
+    engineerType: null,
+    senderName: "Client Salman",
+    text: "Engr. Rafiqul, at what SPT N-value would shallow footing be acceptable for 5 stories?",
+    attachedContext: null,
+    timestamp: new Date(Date.now() - 3600000 * 0.9).toISOString(),
+  },
+  {
+    id: "msg_seed_6",
+    threadId: "thread_client_soil_1",
+    senderRole: "engineer",
+    engineerType: "soil",
+    senderName: "Engr. Mohammad Rafiqul",
+    text: "Under BNBC 2020, for shallow mat or isolated footings supporting 5 stories, you generally need an SPT N-value of 15 or higher within the top 15-20 feet. If N is below 10, bored cast-in-situ piling will be required.",
+    attachedContext: null,
+    timestamp: new Date(Date.now() - 3600000 * 0.5).toISOString(),
+  },
+];
+
+function loadFallbackMessages() {
+  try {
+    if (fs.existsSync(FALLBACK_MESSAGES_FILE)) {
+      const data = JSON.parse(fs.readFileSync(FALLBACK_MESSAGES_FILE, "utf8"));
+      if (Array.isArray(data) && data.length > 0) {
+        return data;
+      }
+    }
+  } catch (err) {
+    console.warn("[Chat] Could not read fallbackMessages.json:", err.message);
+  }
+  saveFallbackMessages(SEED_FALLBACK_MESSAGES);
+  return [...SEED_FALLBACK_MESSAGES];
+}
+
+function saveFallbackMessages(messages) {
+  try {
+    fs.writeFileSync(FALLBACK_MESSAGES_FILE, JSON.stringify(messages, null, 2), "utf8");
+  } catch (err) {
+    console.warn("[Chat] Could not write fallbackMessages.json:", err.message);
+  }
+}
+
+let fallbackMessages = loadFallbackMessages();
+
+// ============================================================
+// Middleware
+// ============================================================
+
+app.use(cors());
+app.use(express.json({ limit: "2mb" }));
+
+// ============================================================
+// COST ESTIMATOR 
+// 
+// ============================================================
+
+app.use(
+  "/api/cost-estimator",
+  costEstimatorRouter
+);
+
+// ============================================================
+// Configuration
+// ============================================================
+
+const PORT = process.env.PORT || 4000;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "openai/gpt-4o";
+const OPENROUTER_SITE_URL = process.env.OPENROUTER_SITE_URL || "http://localhost:4000";
+const OPENROUTER_SITE_NAME = process.env.OPENROUTER_SITE_NAME || "CivilHub";
+const OPENROUTER_MAX_TOKENS = parseInt(process.env.OPENROUTER_MAX_TOKENS, 10) || 1000;
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+const JWT_SECRET = process.env.JWT_SECRET || "civilhub-development-secret";
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
+
+function isTransientError(error) {
+  const status = Number(error?.status || error?.code || 0);
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    [408, 429, 500, 502, 503, 504].includes(status) ||
+    message.includes("high demand") ||
+    message.includes("temporarily unavailable") ||
+    message.includes("service unavailable") ||
+    message.includes("unavailable") ||
+    message.includes("timed out") ||
+    message.includes("connect timeout") ||
+    message.includes("fetch failed")
+  );
+}
+
+async function withRetry(operation, maxAttempts = 3, timeoutMs = 30000) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      let timeoutHandle;
+      const timeout = new Promise((_, reject) => {
+        timeoutHandle = setTimeout(
+          () => reject(new Error(`AI request timed out after ${timeoutMs}ms`)),
+          timeoutMs
+        );
+      });
+      const result = await Promise.race([operation(), timeout]);
+      clearTimeout(timeoutHandle);
+      return result;
+    } catch (error) {
+      if (!isTransientError(error) || attempt === maxAttempts) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** (attempt - 1)));
+    }
+  }
+}
+
+// ============================================================
+// Bangladesh Building Code System Context (Feature 1)
+// ============================================================
+
+const SYSTEM_CONTEXT = `
+You are CivilHub AI, a helpful general-purpose assistant with strong expertise in
+Bangladesh civil engineering, architecture, and building regulations.
+
+You are knowledgeable about:
+- Bangladesh National Building Code (BNBC 2020)
+- RAJUK Imarat Nirman Bidhimala
+- RAJUK building regulations
+- CDA building rules
+- RDA building rules
+- KDA building rules
+- General Pourashava construction guidelines
+
+Rules for your answers:
+1. Answer the user's actual question, including general questions outside construction.
+2. For construction questions, use the Bangladesh context and apply BNBC 2020, RAJUK, CDA, RDA, KDA, or Pourashava guidance as relevant.
+3. When relevant to construction, mention Floor Area Ratio (FAR), setback requirements, maximum permissible height, and road-width-based restrictions.
+4. If a construction answer depends on RAJUK, CDA, RDA, or KDA, make a reasonable assumption and clearly state the assumed authority.
+5. Do not claim to have live data, browse the internet, or know private information. Say when current or verified information is needed.
+6. Keep answers concise, structured, and practical.
+7. Include this disclaimer only for construction, legal, safety, or engineering advice:
+"Disclaimer: Final approval depends on the relevant development authority and review by a licensed structural/civil engineer."
+`;
+
+function createToken(user) {
+  return jwt.sign(
+    {
+      sub: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role || "client",
+      engineerType: user.engineerType || null,
+    },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES_IN }
+  );
+}
+
+function requireAuth(req, res, next) {
+  if (!JWT_SECRET) {
+    return res.status(500).json({ error: "Server is missing JWT_SECRET." });
+  }
+
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+
+  if (!token) {
+    return res.status(401).json({ error: "Authentication required." });
+  }
+
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch {
+    return res.status(401).json({ error: "Invalid or expired token." });
+  }
+}
+
+// ============================================================
+// Helper: In-Memory Fallback Filter Engine
+// ============================================================
+
+function filterInMemory(filters = {}) {
+  const { floors, min_katha, basement, garage, rooftop, q, search } = filters;
+  const searchTerm = (q || search || "").toLowerCase().trim();
+
+  const allItems = SEED_DESIGNS.map((d, index) => ({ id: index + 1, ...d }));
+
+  let targetFloor = null;
+  let hasExactFloorMatch = false;
+  let allowedFloorDiff = 0;
+
+  if (floors) {
+    const parsed = parseInt(floors, 10);
+    if (!isNaN(parsed)) {
+      if (parsed > 0 && parsed <= 40) {
+        targetFloor = parsed;
+        hasExactFloorMatch = allItems.some((item) => item.floors === targetFloor);
+        if (!hasExactFloorMatch && allItems.length > 0) {
+          const minDiff = Math.min(
+            ...allItems.map((it) => Math.abs(it.floors - targetFloor))
+          );
+          allowedFloorDiff = Math.max(minDiff, 2);
+        }
+      } else {
+        targetFloor = -1;
+      }
+    }
+  }
+
+  const filtered = allItems.filter((item) => {
+    if (targetFloor === -1) {
+      return false;
+    }
+    if (targetFloor !== null) {
+      if (hasExactFloorMatch) {
+        if (item.floors !== targetFloor) return false;
+      } else {
+        if (Math.abs(item.floors - targetFloor) > allowedFloorDiff) return false;
+      }
+    }
+    if (min_katha && item.min_katha > parseFloat(min_katha)) {
+      return false;
+    }
+    if (basement !== undefined) {
+      const wantBasement = basement === "true" || basement === "1" || basement === true;
+      if (item.has_basement !== wantBasement) return false;
+    }
+    if (garage !== undefined) {
+      const wantGarage = garage === "true" || garage === "1" || garage === true;
+      if (item.has_garage !== wantGarage) return false;
+    }
+    if (rooftop && item.rooftop_type !== rooftop) {
+      return false;
+    }
+    if (searchTerm) {
+      const matchTitle = item.title.toLowerCase().includes(searchTerm);
+      const matchStyle = item.architectural_style?.toLowerCase().includes(searchTerm);
+      const matchDesc = item.description?.toLowerCase().includes(searchTerm);
+      const matchFeatures = item.features?.some((f) =>
+        f.toLowerCase().includes(searchTerm)
+      );
+      if (!matchTitle && !matchStyle && !matchDesc && !matchFeatures) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  if (targetFloor !== null && !hasExactFloorMatch) {
+    return filtered.sort(
+      (a, b) =>
+        Math.abs(a.floors - targetFloor) - Math.abs(b.floors - targetFloor)
+    );
+  }
+
+  return filtered;
+}
+
+// ============================================================
+// HEALTH CHECK
+// ============================================================
+
+app.get("/health", (req, res) => {
+  require("dotenv").config({ path: path.join(__dirname, ".env"), override: true });
+  const openRouterKey = (process.env.OPENROUTER_API_KEY || "").trim();
+  const geminiKey = (process.env.GEMINI_API_KEY || "").trim();
+  const dbStatus = getStatus();
+  res.json({
+    ok: true,
+    hasKey: Boolean(openRouterKey || geminiKey),
+    provider: openRouterKey ? "openrouter" : (geminiKey ? "gemini" : "local-fallback"),
+    model: openRouterKey
+      ? (process.env.OPENROUTER_MODEL || OPENROUTER_MODEL)
+      : (process.env.GEMINI_MODEL || GEMINI_MODEL),
+    database: dbStatus,
+  });
+});
+
+// ============================================================
+// AUTHENTICATION API
+// ============================================================
+
+app.post("/api/auth/register", async (req, res) => {
+  try {
+    const name = String(req.body.name || "").trim();
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const password = String(req.body.password || "");
+    const role = req.body.role === "engineer" ? "engineer" : "client";
+    let engineerType = null;
+    if (role === "engineer") {
+      engineerType = ["architect", "structural", "soil"].includes(req.body.engineerType)
+        ? req.body.engineerType
+        : "structural";
+    }
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: "Name, email and password are required." });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "Please enter a valid email address." });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters." });
+    }
+    if (!JWT_SECRET) {
+      return res.status(500).json({ error: "Server is missing JWT_SECRET." });
+    }
+
+    if (!getStatus().connected) {
+      fallbackUsers = loadFallbackUsers();
+      if (fallbackUsers.some((u) => u.email.toLowerCase() === email)) {
+        return res.status(409).json({ error: "An account with this email already exists." });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 12);
+      const user = { id: Date.now(), name, email, role, engineerType, passwordHash };
+      fallbackUsers.push(user);
+      saveFallbackUsers(fallbackUsers);
+      const safeUser = { id: user.id, name: user.name, email: user.email, role: user.role, engineerType: user.engineerType };
+      return res.status(201).json({ success: true, token: createToken(safeUser), user: safeUser });
+    }
+
+    const existing = await query("SELECT id FROM users WHERE email = ? LIMIT 1", [email]);
+    if (existing.length) {
+      return res.status(409).json({ error: "An account with this email already exists." });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    let user;
+    try {
+      const result = await query(
+        "INSERT INTO users (name, email, password_hash, role, engineer_type) VALUES (?, ?, ?, ?, ?)",
+        [name, email, passwordHash, role, engineerType]
+      );
+      user = { id: result.insertId, name, email, role, engineerType };
+    } catch {
+      const result = await query(
+        "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
+        [name, email, passwordHash]
+      );
+      user = { id: result.insertId, name, email, role, engineerType };
+    }
+
+    return res.status(201).json({ success: true, token: createToken(user), user });
+  } catch (error) {
+    console.error("Registration error:", error);
+    return res.status(500).json({ error: "Could not create account." });
+  }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const password = String(req.body.password || "");
+    const reqRole = req.body.role;
+    const reqEngineerType = req.body.engineerType;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required." });
+    }
+    if (!JWT_SECRET) {
+      return res.status(500).json({ error: "Server is missing JWT_SECRET." });
+    }
+
+    let user = null;
+
+    if (getStatus().connected) {
+      try {
+        const rows = await query(
+          "SELECT id, name, email, password_hash, role, engineer_type FROM users WHERE LOWER(email) = ? LIMIT 1",
+          [email]
+        );
+        if (rows && rows.length > 0) {
+          user = rows[0];
+        }
+      } catch (dbErr) {
+        console.warn("DB user lookup warning:", dbErr.message);
+      }
+    }
+
+    // If user not in DB or DB offline, check persistent fallbackUsers
+    if (!user) {
+      fallbackUsers = loadFallbackUsers();
+      const fallback = fallbackUsers.find((candidate) => candidate.email.toLowerCase() === email);
+      if (fallback) {
+        user = {
+          id: fallback.id,
+          name: fallback.name,
+          email: fallback.email,
+          password_hash: fallback.passwordHash || fallback.password_hash,
+          role: fallback.role,
+          engineer_type: fallback.engineerType || fallback.engineer_type,
+        };
+      }
+    }
+
+    if (!user) {
+      return res.status(401).json({ error: "Invalid email or password." });
+    }
+
+    const hashToCompare = user.password_hash || user.passwordHash;
+    const passwordMatches = await bcrypt.compare(password, hashToCompare);
+    if (!passwordMatches) {
+      return res.status(401).json({ error: "Invalid email or password." });
+    }
+
+    // Role priority: use user's account role, defaulting to reqRole if unspecified
+    const role = user.role || reqRole || "client";
+    const engineerType = role === "engineer" ? (user.engineer_type || user.engineerType || reqEngineerType || "structural") : null;
+    const safeUser = { id: user.id, name: user.name, email: user.email, role, engineerType };
+    return res.json({ success: true, token: createToken(safeUser), user: safeUser });
+  } catch (error) {
+    console.error("Login error:", error);
+    return res.status(500).json({ error: "Could not log in." });
+  }
+});
+
+app.get("/api/auth/me", requireAuth, async (req, res) => {
+  try {
+    if (!getStatus().connected) {
+      fallbackUsers = loadFallbackUsers();
+      const user = fallbackUsers.find((u) => u.id === req.user.sub || u.email.toLowerCase() === (req.user.email || "").toLowerCase());
+      if (!user) return res.status(404).json({ error: "User not found." });
+      return res.json({
+        success: true,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role || "client",
+          engineerType: user.engineerType || user.engineer_type || null,
+        },
+      });
+    }
+
+    const rows = await query(
+      "SELECT id, name, email, role, engineer_type, created_at FROM users WHERE id = ? LIMIT 1",
+      [req.user.sub]
+    );
+    if (!rows.length) return res.status(404).json({ error: "User not found." });
+    return res.json({ success: true, user: rows[0] });
+  } catch (error) {
+    console.error("Profile error:", error);
+    return res.status(500).json({ error: "Could not load profile." });
+  }
+});
+
+// ============================================================
+// FEATURE 2: SMART DESIGN SUGGESTIONS API
+// ============================================================
+
+/**
+ * GET /api/designs/search
+ * Filter designs based on query parameters
+ */
+app.get("/api/designs/search", async (req, res) => {
+  const { floors, min_katha, basement, garage, rooftop, q, search, bedrooms } = req.query;
+  const dbStatus = getStatus();
+
+  if (dbStatus.connected) {
+    try {
+      let sql = "SELECT * FROM designs WHERE 1=1";
+      const queryParams = [];
+
+      if (floors && floors !== "all") {
+        sql += " AND floors = ?";
+        queryParams.push(parseInt(floors, 10));
+      }
+      if (min_katha && min_katha !== "all") {
+        sql += " AND min_katha <= ?";
+        queryParams.push(parseFloat(min_katha));
+      }
+      if (basement !== undefined && basement !== "all") {
+        sql += " AND has_basement = ?";
+        queryParams.push(basement === "true" || basement === "1" ? 1 : 0);
+      }
+      if (garage !== undefined && garage !== "all") {
+        sql += " AND has_garage = ?";
+        queryParams.push(garage === "true" || garage === "1" ? 1 : 0);
+      }
+      if (rooftop && rooftop !== "all") {
+        sql += " AND rooftop_type = ?";
+        queryParams.push(rooftop);
+      }
+      if (bedrooms && bedrooms !== "all") {
+        sql += " AND bedrooms >= ?";
+        queryParams.push(parseInt(bedrooms, 10));
+      }
+
+      const searchTerm = q || search;
+      if (searchTerm && String(searchTerm).trim()) {
+        sql +=
+          " AND (title LIKE ? OR architectural_style LIKE ? OR description LIKE ?)";
+        const pattern = `%${String(searchTerm).trim()}%`;
+        queryParams.push(pattern, pattern, pattern);
+      }
+
+      sql += " ORDER BY id DESC";
+
+      const rows = await query(sql, queryParams);
+
+      const parsedRows = rows.map((row) => ({
+        ...row,
+        has_basement: Boolean(row.has_basement),
+        has_garage: Boolean(row.has_garage),
+        features:
+          typeof row.features === "string"
+            ? JSON.parse(row.features)
+            : row.features || [],
+      }));
+
+      return res.json({
+        success: true,
+        source: "mysql",
+        count: parsedRows.length,
+        designs: parsedRows,
+      });
+    } catch (err) {
+      console.error("[MySQL Search Error]:", err);
+    }
+  }
+
+  // In-Memory Fallback
+  const results = filterInMemory(req.query);
+  res.json({
+    success: true,
+    source: "memory_catalog",
+    count: results.length,
+    designs: results,
+  });
+});
+
+/**
+ * GET /api/designs
+ * Retrieve all designs catalog from MySQL
+ */
+app.get("/api/designs", async (req, res) => {
+  const dbStatus = getStatus();
+
+  if (dbStatus.connected) {
+    try {
+      const rows = await query("SELECT * FROM designs ORDER BY id DESC;");
+      const parsedRows = rows.map((row) => ({
+        ...row,
+        has_basement: Boolean(row.has_basement),
+        has_garage: Boolean(row.has_garage),
+        features:
+          typeof row.features === "string"
+            ? JSON.parse(row.features)
+            : row.features || [],
+      }));
+      return res.json({ success: true, source: "mysql", count: parsedRows.length, designs: parsedRows });
+    } catch (err) {
+      console.error("[MySQL Get All Error]:", err);
+    }
+  }
+
+  const allDesigns = SEED_DESIGNS.map((d, index) => ({ id: index + 1, ...d }));
+  res.json({ success: true, source: "memory_catalog", count: allDesigns.length, designs: allDesigns });
+});
+
+/**
+ * GET /api/designs/:id
+ * Retrieve single design details by ID from MySQL
+ */
+app.get("/api/designs/:id", async (req, res) => {
+  const { id } = req.params;
+  const designId = parseInt(id, 10);
+  const dbStatus = getStatus();
+
+  if (dbStatus.connected) {
+    try {
+      const rows = await query("SELECT * FROM designs WHERE id = ? LIMIT 1;", [
+        designId,
+      ]);
+      if (rows && rows.length > 0) {
+        const row = rows[0];
+        return res.json({
+          success: true,
+          source: "mysql",
+          design: {
+            ...row,
+            has_basement: Boolean(row.has_basement),
+            has_garage: Boolean(row.has_garage),
+            features:
+              typeof row.features === "string"
+                ? JSON.parse(row.features)
+                : row.features || [],
+          },
+        });
+      }
+      return res.status(404).json({ error: "Design not found" });
+    } catch (err) {
+      console.error("[MySQL Get By ID Error]:", err);
+    }
+  }
+
+  const found = SEED_DESIGNS.find((_, idx) => idx + 1 === designId);
+  if (found) {
+    return res.json({ success: true, design: { id: designId, ...found } });
+  }
+  res.status(404).json({ error: "Design not found" });
+});
+
+/**
+ * POST /api/designs
+ * Create and insert a new custom design into MySQL database
+ */
+app.post("/api/designs", async (req, res) => {
+  const dbStatus = getStatus();
+  if (!dbStatus.connected) {
+    return res.status(503).json({ error: "Database not connected" });
+  }
+
+  try {
+    const data = req.body;
+    if (!data.title || !data.floors) {
+      return res.status(400).json({ error: "Missing required fields: title, floors" });
+    }
+
+    const insertSql = `
+      INSERT INTO designs (
+        title, floors, has_basement, has_garage, rooftop_type,
+        min_katha, built_area_sqft, units_per_floor, unit_size_sqft,
+        bedrooms, bathrooms, balconies, dining_space, drawing_space, kitchen_space,
+        parking_capacity, architectural_style, image_url, description, features
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    `;
+
+    const params = [
+      data.title.trim(),
+      parseInt(data.floors, 10) || 5,
+      data.has_basement ? 1 : 0,
+      data.has_garage ? 1 : 0,
+      data.rooftop_type || "Open Terrace",
+      parseFloat(data.min_katha) || 4.0,
+      parseInt(data.built_area_sqft, 10) || 12000,
+      parseInt(data.units_per_floor, 10) || 2,
+      parseInt(data.unit_size_sqft, 10) || 1500,
+      parseInt(data.bedrooms, 10) || 3,
+      parseInt(data.bathrooms, 10) || 3,
+      parseInt(data.balconies, 10) || 2,
+      data.dining_space || null,
+      data.drawing_space || null,
+      data.kitchen_space || null,
+      parseInt(data.parking_capacity, 10) || (data.has_garage ? 4 : 0),
+      data.architectural_style || "Contemporary Urban",
+      data.image_url || "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80",
+      data.description || null,
+      JSON.stringify(data.features || []),
+    ];
+
+    const result = await query(insertSql, params);
+    const newId = result.insertId;
+
+    const [createdRows] = await query("SELECT * FROM designs WHERE id = ?;", [newId]);
+    const created = createdRows || { id: newId, ...data };
+
+    res.status(201).json({
+      success: true,
+      message: "Design created successfully in MySQL",
+      design: {
+        ...created,
+        has_basement: Boolean(created.has_basement),
+        has_garage: Boolean(created.has_garage),
+        features: typeof created.features === "string" ? JSON.parse(created.features) : created.features || [],
+      },
+    });
+  } catch (err) {
+    console.error("[MySQL Create Design Error]:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /api/designs/:id
+ * Update design specifications and rooms in MySQL database
+ */
+app.put("/api/designs/:id", async (req, res) => {
+  const dbStatus = getStatus();
+  if (!dbStatus.connected) {
+    return res.status(503).json({ error: "Database not connected" });
+  }
+
+  const { id } = req.params;
+  const designId = parseInt(id, 10);
+  const data = req.body;
+
+  try {
+    const updateSql = `
+      UPDATE designs SET
+        title = COALESCE(?, title),
+        floors = COALESCE(?, floors),
+        has_basement = COALESCE(?, has_basement),
+        has_garage = COALESCE(?, has_garage),
+        rooftop_type = COALESCE(?, rooftop_type),
+        min_katha = COALESCE(?, min_katha),
+        built_area_sqft = COALESCE(?, built_area_sqft),
+        units_per_floor = COALESCE(?, units_per_floor),
+        unit_size_sqft = COALESCE(?, unit_size_sqft),
+        bedrooms = COALESCE(?, bedrooms),
+        bathrooms = COALESCE(?, bathrooms),
+        balconies = COALESCE(?, balconies),
+        dining_space = COALESCE(?, dining_space),
+        drawing_space = COALESCE(?, drawing_space),
+        kitchen_space = COALESCE(?, kitchen_space),
+        parking_capacity = COALESCE(?, parking_capacity),
+        architectural_style = COALESCE(?, architectural_style),
+        description = COALESCE(?, description)
+      WHERE id = ?;
+    `;
+
+    const params = [
+      data.title ? data.title.trim() : null,
+      data.floors ? parseInt(data.floors, 10) : null,
+      data.has_basement !== undefined ? (data.has_basement ? 1 : 0) : null,
+      data.has_garage !== undefined ? (data.has_garage ? 1 : 0) : null,
+      data.rooftop_type || null,
+      data.min_katha ? parseFloat(data.min_katha) : null,
+      data.built_area_sqft ? parseInt(data.built_area_sqft, 10) : null,
+      data.units_per_floor ? parseInt(data.units_per_floor, 10) : null,
+      data.unit_size_sqft ? parseInt(data.unit_size_sqft, 10) : null,
+      data.bedrooms ? parseInt(data.bedrooms, 10) : null,
+      data.bathrooms ? parseInt(data.bathrooms, 10) : null,
+      data.balconies ? parseInt(data.balconies, 10) : null,
+      data.dining_space !== undefined ? data.dining_space : null,
+      data.drawing_space !== undefined ? data.drawing_space : null,
+      data.kitchen_space !== undefined ? data.kitchen_space : null,
+      data.parking_capacity ? parseInt(data.parking_capacity, 10) : null,
+      data.architectural_style || null,
+      data.description || null,
+      designId,
+    ];
+
+    await query(updateSql, params);
+
+    const rows = await query("SELECT * FROM designs WHERE id = ?;", [designId]);
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ error: "Design not found" });
+    }
+
+    const updated = rows[0];
+    res.json({
+      success: true,
+      message: "Design updated in MySQL",
+      design: {
+        ...updated,
+        has_basement: Boolean(updated.has_basement),
+        has_garage: Boolean(updated.has_garage),
+        features: typeof updated.features === "string" ? JSON.parse(updated.features) : updated.features || [],
+      },
+    });
+  } catch (err) {
+    console.error("[MySQL Update Design Error]:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * DELETE /api/designs/:id
+ * Remove a design from MySQL database
+ */
+app.delete("/api/designs/:id", async (req, res) => {
+  const dbStatus = getStatus();
+  if (!dbStatus.connected) {
+    return res.status(503).json({ error: "Database not connected" });
+  }
+
+  const { id } = req.params;
+  const designId = parseInt(id, 10);
+
+  try {
+    const result = await query("DELETE FROM designs WHERE id = ?;", [designId]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Design not found" });
+    }
+    res.json({ success: true, message: `Design ${designId} deleted from MySQL` });
+  } catch (err) {
+    console.error("[MySQL Delete Design Error]:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// FEATURE 3: COST ESTIMATOR DATABASE API (MySQL PRIMARY)
+// ============================================================
+
+/**
+ * GET /api/costs/rates
+ * Retrieve live construction rates and formula weights from MySQL
+ */
+app.get("/api/costs/rates", async (req, res) => {
+  const dbStatus = getStatus();
+  if (dbStatus.connected) {
+    try {
+      const rows = await query("SELECT * FROM construction_rates;");
+      if (rows && rows.length > 0) {
+        const ratesMap = {};
+        rows.forEach((r) => {
+          ratesMap[r.grade] = {
+            rate_per_sqft: r.rate_per_sqft,
+            structure_share: parseFloat(r.structure_share),
+            finishing_share: parseFloat(r.finishing_share),
+            electrical_share: parseFloat(r.electrical_share),
+            plumbing_share: parseFloat(r.plumbing_share),
+            basement_rate_factor: parseFloat(r.basement_rate_factor),
+            basement_area_factor: parseFloat(r.basement_area_factor),
+            garage_rate_factor: parseFloat(r.garage_rate_factor),
+            garage_area_sqft: r.garage_area_sqft,
+          };
+        });
+        return res.json({ success: true, source: "mysql", rates: ratesMap });
+      }
+    } catch (err) {
+      console.error("[MySQL Cost Rates Error]:", err);
+    }
+  }
+
+  // Fallback defaults
+  res.json({
+    success: true,
+    source: "fallback",
+    rates: {
+      standard: { rate_per_sqft: 2200, structure_share: 0.45, finishing_share: 0.3, electrical_share: 0.12, plumbing_share: 0.13 },
+      premium:  { rate_per_sqft: 2800, structure_share: 0.45, finishing_share: 0.3, electrical_share: 0.12, plumbing_share: 0.13 },
+      luxury:   { rate_per_sqft: 3600, structure_share: 0.45, finishing_share: 0.3, electrical_share: 0.12, plumbing_share: 0.13 },
+    },
+  });
+});
+
+/**
+ * POST /api/costs/estimate
+ * Record a calculated cost estimate into MySQL cost_estimates table
+ */
+app.post("/api/costs/estimate", async (req, res) => {
+  const dbStatus = getStatus();
+  const {
+    floors,
+    floorAreaSqft,
+    quality = "standard",
+    hasBasement = false,
+    hasGarage = false,
+    designId = null,
+    designTitle = null,
+  } = req.body;
+
+  if (!floors || !floorAreaSqft) {
+    return res.status(400).json({ error: "Missing required fields: floors, floorAreaSqft" });
+  }
+
+  try {
+    // Fetch rates from DB or fallback
+    let ratePerSqft = 2200;
+    let structureShare = 0.45;
+    let finishingShare = 0.30;
+    let electricalShare = 0.12;
+    let plumbingShare = 0.13;
+    let basementRateFactor = 1.25;
+    let basementAreaFactor = 0.90;
+    let garageRateFactor = 0.80;
+    let garageAreaSqft = 250;
+
+    if (dbStatus.connected) {
+      const rows = await query("SELECT * FROM construction_rates WHERE grade = ? LIMIT 1;", [quality.toLowerCase()]);
+      if (rows && rows.length > 0) {
+        ratePerSqft = rows[0].rate_per_sqft;
+        structureShare = parseFloat(rows[0].structure_share);
+        finishingShare = parseFloat(rows[0].finishing_share);
+        electricalShare = parseFloat(rows[0].electrical_share);
+        plumbingShare = parseFloat(rows[0].plumbing_share);
+        basementRateFactor = parseFloat(rows[0].basement_rate_factor);
+        basementAreaFactor = parseFloat(rows[0].basement_area_factor);
+        garageRateFactor = parseFloat(rows[0].garage_rate_factor);
+        garageAreaSqft = rows[0].garage_area_sqft;
+      }
+    }
+
+    const floorCount = Math.max(1, Math.floor(Number(floors) || 1));
+    const areaPerFloor = Math.max(0, Number(floorAreaSqft) || 0);
+    const floorsCost = floorCount * areaPerFloor * ratePerSqft;
+    const basementCost = hasBasement ? areaPerFloor * basementAreaFactor * ratePerSqft * basementRateFactor : 0;
+    const garageCost = hasGarage ? garageAreaSqft * ratePerSqft * garageRateFactor : 0;
+    const totalCost = Math.round(floorsCost + basementCost + garageCost);
+    const structureCost = Math.round(totalCost * structureShare);
+    const finishingCost = Math.round(totalCost * finishingShare);
+    const electricalCost = Math.round(totalCost * electricalShare);
+    const plumbingCost = Math.round(totalCost * plumbingShare);
+    const totalBuiltUpArea = Math.round(floorCount * areaPerFloor + (hasBasement ? areaPerFloor * basementAreaFactor : 0) + (hasGarage ? garageAreaSqft : 0));
+
+    let insertedId = null;
+    if (dbStatus.connected) {
+      const insertSql = `
+        INSERT INTO cost_estimates (
+          floors, floor_area_sqft, quality, has_basement, has_garage,
+          rate_per_sqft, total_built_up_area, structure_cost, finishing_cost,
+          electrical_cost, plumbing_cost, total_cost_bdt, design_id, design_title
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+      `;
+      const result = await query(insertSql, [
+        floorCount,
+        areaPerFloor,
+        quality.toLowerCase(),
+        hasBasement ? 1 : 0,
+        hasGarage ? 1 : 0,
+        ratePerSqft,
+        totalBuiltUpArea,
+        structureCost,
+        finishingCost,
+        electricalCost,
+        plumbingCost,
+        totalCost,
+        designId || null,
+        designTitle || null,
+      ]);
+      insertedId = result.insertId;
+    }
+
+    res.json({
+      success: true,
+      source: dbStatus.connected ? "mysql" : "computed",
+      estimateId: insertedId,
+      breakdown: {
+        floors: floorCount,
+        floorAreaSqft: areaPerFloor,
+        quality,
+        ratePerSqft,
+        totalBuiltUpArea,
+        structure: structureCost,
+        finishing: finishingCost,
+        electrical: electricalCost,
+        plumbing: plumbingCost,
+        total: totalCost,
+        designTitle,
+      },
+    });
+  } catch (err) {
+    console.error("[Cost Estimate Error]:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/costs/history
+ * Retrieve recent cost estimates from MySQL
+ */
+app.get("/api/costs/history", async (req, res) => {
+  const dbStatus = getStatus();
+  if (dbStatus.connected) {
+    try {
+      const rows = await query("SELECT * FROM cost_estimates ORDER BY id DESC LIMIT 20;");
+      return res.json({ success: true, count: rows.length, history: rows });
+    } catch (err) {
+      console.error("[Cost History Error]:", err);
+    }
+  }
+  res.json({ success: true, count: 0, history: [] });
+});
+
+// ============================================================
+// FEATURE 1: FEASIBILITY LOGGING & GEMINI AI PROXY
+// ============================================================
+
+/**
+ * POST /api/feasibility/check
+ * Record a feasibility evaluation in MySQL feasibility_logs
+ */
+app.post("/api/feasibility/check", async (req, res) => {
+  const dbStatus = getStatus();
+  const { land_katha, road_width_ft, floors, authority = "RAJUK", is_permissible, max_permissible_height, far_ratio, notes } = req.body;
+
+  if (dbStatus.connected) {
+    try {
+      const insertSql = `
+        INSERT INTO feasibility_logs (
+          land_katha, road_width_ft, floors, authority, is_permissible,
+          max_permissible_height, far_ratio, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+      `;
+      const result = await query(insertSql, [
+        parseFloat(land_katha) || 0,
+        parseFloat(road_width_ft) || 0,
+        parseInt(floors, 10) || 1,
+        authority || "RAJUK",
+        is_permissible ? 1 : 0,
+        max_permissible_height || null,
+        far_ratio ? parseFloat(far_ratio) : null,
+        notes || null,
+      ]);
+      return res.json({ success: true, logId: result.insertId });
+    } catch (err) {
+      console.error("[Feasibility Log Error]:", err);
+    }
+  }
+  res.json({ success: true, logId: null });
+});
+
+app.post("/api/ask-building-code", async (req, res) => {
+  try {
+    const { question, context } = req.body;
+
+    if (!question || !String(question).trim()) {
+      return res.status(400).json({ error: "Missing 'question' in request body." });
+    }
+
+    const cleanQuestion = String(question).trim();
+
+    // Reload dotenv dynamically so user can update API keys in .env on the fly
+    require("dotenv").config({ path: path.join(__dirname, ".env"), override: true });
+    const openRouterApiKey = (process.env.OPENROUTER_API_KEY || "").trim();
+    const geminiApiKey = (process.env.GEMINI_API_KEY || "").trim();
+
+    const contextText = context
+      ? `\n\nAttached project context:\n${JSON.stringify(context)}`
+      : "";
+
+    // 1. Ask OpenRouter (Primary AI Provider)
+    if (openRouterApiKey) {
+      const openRouterModels = Array.from(
+        new Set([
+          process.env.OPENROUTER_MODEL || OPENROUTER_MODEL || "openai/gpt-4o",
+          "openai/gpt-4o",
+          "openai/gpt-4o-mini",
+          "google/gemini-2.0-flash-001",
+          "meta-llama/llama-3.3-70b-instruct",
+        ])
+      );
+
+      const maxTokens = parseInt(process.env.OPENROUTER_MAX_TOKENS, 10) || 1000;
+      const siteUrl = process.env.OPENROUTER_SITE_URL || OPENROUTER_SITE_URL;
+      const siteName = process.env.OPENROUTER_SITE_NAME || OPENROUTER_SITE_NAME;
+
+      for (const modelName of openRouterModels) {
+        try {
+          const data = await withRetry(async () => {
+            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${openRouterApiKey}`,
+                "HTTP-Referer": siteUrl,
+                "X-Title": siteName,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: modelName,
+                max_tokens: maxTokens,
+                messages: [
+                  {
+                    role: "system",
+                    content: SYSTEM_CONTEXT,
+                  },
+                  {
+                    role: "user",
+                    content: `${cleanQuestion}${contextText}`,
+                  },
+                ],
+              }),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({}));
+              const error = new Error(
+                errorData?.error?.message || response.statusText || `OpenRouter HTTP ${response.status}`
+              );
+              error.status = response.status;
+              throw error;
+            }
+
+            return response.json();
+          }, 2, 25000);
+
+          const answer = data?.choices?.[0]?.message?.content?.trim();
+          if (answer) {
+            return res.json({
+              answer,
+              model: modelName,
+              source: "openrouter",
+            });
+          }
+        } catch (openRouterErr) {
+          console.warn(`[OpenRouter] Model ${modelName} failed:`, openRouterErr.message);
+        }
+      }
+    }
+
+    // 2. Ask Gemini directly (Fallback AI Provider)
+    if (geminiApiKey) {
+      const fullPrompt = `${SYSTEM_CONTEXT}${contextText}\n\nUser question:\n${cleanQuestion}`;
+      const candidateModels = Array.from(
+        new Set([
+          process.env.GEMINI_MODEL || GEMINI_MODEL || "gemini-2.0-flash",
+          "gemini-2.0-flash",
+          "gemini-1.5-flash",
+        ])
+      );
+
+      for (const candidate of candidateModels) {
+        for (const apiVer of ["v1beta", "v1"]) {
+          try {
+            const data = await withRetry(async () => {
+              const geminiResponse = await fetch(
+                `https://generativelanguage.googleapis.com/${apiVer}/models/${candidate}:generateContent`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": geminiApiKey,
+                  },
+                  body: JSON.stringify({
+                    contents: [{ parts: [{ text: fullPrompt }] }],
+                    generationConfig: { maxOutputTokens: 800 },
+                  }),
+                }
+              );
+              if (!geminiResponse.ok) {
+                const errorData = await geminiResponse.json().catch(() => ({}));
+                const error = new Error(
+                  errorData?.error?.message || geminiResponse.statusText
+                );
+                error.status = geminiResponse.status;
+                throw error;
+              }
+              return geminiResponse.json();
+            }, 2, 15000);
+
+            const text = data?.candidates?.[0]?.content?.parts
+              ?.map((part) => part?.text || "")
+              .join("")
+              .trim();
+            if (text) {
+              return res.json({ answer: text, model: candidate, source: "gemini" });
+            }
+          } catch (geminiErr) {
+            console.warn(`[Gemini] ${candidate} ${apiVer} failed:`, geminiErr.message);
+          }
+        }
+      }
+    }
+
+    // 3. Local BNBC engine fallback
+    const fallbackAnswer = generateBnbcExpertAnswer(cleanQuestion, context);
+    if (fallbackAnswer) {
+      return res.json({
+        answer: fallbackAnswer,
+        model: "local-bnbc-engine",
+        source: "local-fallback",
+      });
+    }
+
+    return res.json({
+      answer: `### Bangladesh Building Code & Engineering Advisory (BNBC 2020)\n\nThank you for your question. For detailed structural analysis, Floor Area Ratio (FAR) calculation, or municipal permits (RAJUK / CDA / KDA / RDA), please consult the relevant sections in BNBC 2020 or chat with one of our verified structural, architectural, or geotechnical engineers.`,
+      model: "local-bnbc-engine",
+      source: "local-fallback",
+    });
+  } catch (error) {
+    console.error("Proxy error:", error);
+    const fallbackAnswer = generateBnbcExpertAnswer(req.body?.question || "", req.body?.context);
+    return res.json({
+      answer: fallbackAnswer || "CivilHub AI Assistant is ready. Please try asking your civil engineering or building code question again.",
+      model: "local-bnbc-engine",
+      source: "local-fallback",
+    });
+  }
+});
+
+// ============================================================
+// FEATURE: EXPERT DIRECTORY & CONSULTATION CHAT API
+// ============================================================
+
+const CATALOG_EXPERTS = [
+  {
+    id: "architect_1",
+    name: "Ar. Nusrat Jahan",
+    title: "Senior Architect (Arc)",
+    roleLabel: "Architect",
+    discipline: "architect",
+    license: "IAB-K2104",
+    experience: "12 years exp",
+    firm: "Studio Nirman Dhaka",
+    rating: "4.9 ★ (84 reviews)",
+    specialties: ["Floor Layouts", "FAR Calculation", "RAJUK & CDA Approval"],
+    threadId: "thread_client_architect_1",
+    avatarInitials: "NJ",
+    avatarColor: "#0284c7",
+    greeting:
+      "Hello! I am Ar. Nusrat Jahan, your Architectural Consultant (IAB-K2104).\n\nI can assist you with Floor Area Ratio (FAR) calculations, mandatory front/rear setbacks, architectural floor layouts, and RAJUK/CDA approval preparation.",
+  },
+  {
+    id: "architect_2",
+    name: "Ar. Mahmudul Hasan",
+    title: "Principal Urban Architect",
+    roleLabel: "Architect",
+    discipline: "architect",
+    license: "IAB-M3190",
+    experience: "8 years exp",
+    firm: "Hasan & Associates",
+    rating: "4.8 ★ (56 reviews)",
+    specialties: ["Residential Elevation", "Interior Space Planning", "Green Building"],
+    threadId: "thread_client_architect_2",
+    avatarInitials: "MH",
+    avatarColor: "#0369a1",
+    greeting:
+      "Hello! I am Ar. Mahmudul Hasan (IAB-M3190). I specialize in modern residential elevation, sustainable building envelopes, and RAJUK building code compliance.",
+  },
+  {
+    id: "structural_1",
+    name: "Engr. Tanvir Ahmed, PEng",
+    title: "Principal Structural Engineer",
+    roleLabel: "Structure Eng",
+    discipline: "structural",
+    license: "MIEB-18492",
+    experience: "15 years exp",
+    firm: "Dhaka Structural Dynamics",
+    rating: "5.0 ★ (112 reviews)",
+    specialties: ["BNBC 2020", "Seismic RCC Detailing", "Shear Wall Design"],
+    threadId: "thread_client_structural_1",
+    avatarInitials: "TA",
+    avatarColor: "#2563eb",
+    greeting:
+      "Hello! I am Engr. Tanvir Ahmed, PEng (MIEB-18492).\n\nI can help you evaluate column and shear wall sizing, earthquake-resistant RCC frame detailing, structural drawing review, and BNBC 2020 structural safety compliance.",
+  },
+  {
+    id: "structural_2",
+    name: "Engr. Shahriar Kabir",
+    title: "Senior RCC Frame Specialist",
+    roleLabel: "Structure Eng",
+    discipline: "structural",
+    license: "MIEB-22104",
+    experience: "9 years exp",
+    firm: "Apex Structural Engineers",
+    rating: "4.9 ★ (63 reviews)",
+    specialties: ["High-rise Detailing", "Beam-Column Joints", "ETABS Modeling"],
+    threadId: "thread_client_structural_2",
+    avatarInitials: "SK",
+    avatarColor: "#1d4ed8",
+    greeting:
+      "Hello! I am Engr. Shahriar Kabir (MIEB-22104). I specialize in high-rise RCC framing, ductile rebar confinement, and ETABS structural analysis.",
+  },
+  {
+    id: "soil_1",
+    name: "Engr. Mohammad Rafiqul",
+    title: "Geotechnical & Soil Specialist",
+    roleLabel: "Soil Eng",
+    discipline: "soil",
+    license: "FIEB-09812",
+    experience: "18 years exp",
+    firm: "Bengal Geotechnical Lab",
+    rating: "4.9 ★ (92 reviews)",
+    specialties: ["Borehole SPT N-Value", "Bored Cast-in-Situ Piling", "Pile Load Test"],
+    threadId: "thread_client_soil_1",
+    avatarInitials: "MR",
+    avatarColor: "#059669",
+    greeting:
+      "Hello! I am Engr. Mohammad Rafiqul, your Geotechnical & Soil Specialist (FIEB-09812).\n\nI specialize in soil test review, borehole SPT N-value interpretation, allowable bearing capacity calculation, and cast-in-situ bored pile foundation design.",
+  },
+  {
+    id: "soil_2",
+    name: "Engr. Anisur Rahman",
+    title: "Foundation & Soil Consultant",
+    roleLabel: "Soil Eng",
+    discipline: "soil",
+    license: "MIEB-17632",
+    experience: "11 years exp",
+    firm: "Delta Geo-Engineering",
+    rating: "4.8 ★ (47 reviews)",
+    specialties: ["Mat / Raft Footing", "Differential Settlement", "Soil Improvement"],
+    threadId: "thread_client_soil_2",
+    avatarInitials: "AR",
+    avatarColor: "#047857",
+    greeting:
+      "Hello! I am Engr. Anisur Rahman (MIEB-17632). I evaluate soil bearing capacity, settlement risks in alluvial silt, and mat foundation suitability.",
+  },
+];
+
+/**
+ * GET /api/experts
+ * Fetch verified consultants from MySQL or robust fallback catalog
+ */
+app.get("/api/experts", async (req, res) => {
+  const dbStatus = getStatus();
+  const { discipline } = req.query;
+
+  if (dbStatus.connected) {
+    try {
+      let sql = "SELECT * FROM experts WHERE is_active = 1";
+      const params = [];
+      if (discipline && discipline !== "all") {
+        sql += " AND discipline = ?";
+        params.push(discipline);
+      }
+      sql += " ORDER BY discipline, name ASC";
+
+      const rows = await query(sql, params);
+      if (rows && rows.length > 0) {
+        const experts = rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          title: r.title,
+          roleLabel: r.role_label,
+          discipline: r.discipline,
+          license: r.license,
+          experience: r.experience,
+          firm: r.firm,
+          rating: r.rating,
+          specialties: typeof r.specialties === "string" ? JSON.parse(r.specialties) : r.specialties,
+          threadId: r.thread_id,
+          avatarInitials: r.avatar_initials,
+          avatarColor: r.avatar_color,
+          greeting: r.greeting,
+        }));
+        return res.json({ success: true, count: experts.length, experts });
+      }
+    } catch (err) {
+      console.error("[Experts Query Error]:", err);
+    }
+  }
+
+  // Built-in catalog fallback
+  let list = [...CATALOG_EXPERTS];
+  if (discipline && discipline !== "all") {
+    list = list.filter((e) => e.discipline === discipline);
+  }
+  return res.json({ success: true, count: list.length, experts: list });
+});
+
+/**
+ * GET /api/experts/:id
+ * Fetch single expert by ID
+ */
+app.get("/api/experts/:id", async (req, res) => {
+  const dbStatus = getStatus();
+  const { id } = req.params;
+
+  if (dbStatus.connected) {
+    try {
+      const rows = await query("SELECT * FROM experts WHERE id = ? LIMIT 1", [id]);
+      if (rows.length > 0) {
+        const r = rows[0];
+        return res.json({
+          success: true,
+          expert: {
+            id: r.id,
+            name: r.name,
+            title: r.title,
+            roleLabel: r.role_label,
+            discipline: r.discipline,
+            license: r.license,
+            experience: r.experience,
+            firm: r.firm,
+            rating: r.rating,
+            specialties: typeof r.specialties === "string" ? JSON.parse(r.specialties) : r.specialties,
+            threadId: r.thread_id,
+            avatarInitials: r.avatar_initials,
+            avatarColor: r.avatar_color,
+            greeting: r.greeting,
+          },
+        });
+      }
+    } catch (err) {
+      console.error("[Expert Detail Error]:", err);
+    }
+  }
+
+  const exp = CATALOG_EXPERTS.find((e) => e.id === id);
+  if (exp) {
+    return res.json({ success: true, expert: exp });
+  }
+  res.status(404).json({ success: false, error: "Expert not found" });
+});
+
+/**
+ * GET /api/chat/messages/:threadId
+ * Fetch conversation history from MySQL or persistent fallbackMessages.json
+ */
+app.get("/api/chat/messages/:threadId", async (req, res) => {
+  const dbStatus = getStatus();
+  const { threadId } = req.params;
+
+  if (dbStatus.connected) {
+    try {
+      const rows = await query(
+        "SELECT * FROM consultation_messages WHERE thread_id = ? ORDER BY created_at ASC",
+        [threadId]
+      );
+
+      if (rows && rows.length > 0) {
+        const messages = rows.map((r) => ({
+          id: r.id,
+          threadId: r.thread_id,
+          senderRole: r.sender_role,
+          engineerType: r.engineer_type,
+          senderName: r.sender_name,
+          text: r.message_text,
+          attachedContext: typeof r.attached_context === "string" ? JSON.parse(r.attached_context) : r.attached_context,
+          timestamp: r.created_at,
+        }));
+
+        return res.json({ success: true, count: messages.length, messages });
+      }
+    } catch (err) {
+      console.error("[Chat Messages Query Error]:", err);
+    }
+  }
+
+  // Persistent fallbackMessages store
+  fallbackMessages = loadFallbackMessages();
+  const filtered = fallbackMessages
+    .filter((m) => m.threadId === threadId)
+    .sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+
+  res.json({ success: true, count: filtered.length, messages: filtered });
+});
+
+/**
+ * POST /api/chat/messages
+ * Store a new consultation message in MySQL AND persistent fallbackMessages.json
+ */
+app.post("/api/chat/messages", async (req, res) => {
+  const dbStatus = getStatus();
+  const { id, threadId, senderRole = "client", engineerType = null, senderName = "Client", text, attachedContext = null } = req.body;
+
+  if (!threadId || !text || !String(text).trim()) {
+    return res.status(400).json({ error: "Missing threadId or message text." });
+  }
+
+  const msgId = id || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+  const cleanText = String(text).trim();
+  const now = new Date().toISOString();
+
+  const savedMessage = {
+    id: msgId,
+    threadId,
+    senderRole,
+    engineerType,
+    senderName,
+    text: cleanText,
+    attachedContext,
+    timestamp: now,
+  };
+
+  // 1. Always save to persistent fallback file so messages never disappear
+  fallbackMessages = loadFallbackMessages();
+  const existingIdx = fallbackMessages.findIndex((m) => m.id === msgId);
+  if (existingIdx >= 0) {
+    fallbackMessages[existingIdx] = savedMessage;
+  } else {
+    fallbackMessages.push(savedMessage);
+  }
+  saveFallbackMessages(fallbackMessages);
+
+  // 2. If MySQL is connected, also persist to database
+  if (dbStatus.connected) {
+    try {
+      await query(
+        `INSERT INTO consultation_messages (
+          id, thread_id, sender_role, engineer_type, sender_name, message_text, attached_context, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE message_text = VALUES(message_text)`,
+        [
+          msgId,
+          threadId,
+          senderRole,
+          engineerType,
+          senderName,
+          cleanText,
+          attachedContext ? JSON.stringify(attachedContext) : null,
+          new Date(now),
+        ]
+      );
+    } catch (err) {
+      console.error("[Save Chat Message DB Error]:", err);
+    }
+  }
+
+  return res.status(201).json({ success: true, message: savedMessage });
+});
+
+/**
+ * DELETE /api/chat/messages/:threadId
+ * Clear consultation history in MySQL and persistent fallbackMessages
+ */
+app.delete("/api/chat/messages/:threadId", async (req, res) => {
+  const dbStatus = getStatus();
+  const { threadId } = req.params;
+
+  fallbackMessages = loadFallbackMessages();
+  fallbackMessages = fallbackMessages.filter((m) => m.threadId !== threadId);
+  saveFallbackMessages(fallbackMessages);
+
+  if (dbStatus.connected) {
+    try {
+      await query("DELETE FROM consultation_messages WHERE thread_id = ?", [threadId]);
+    } catch (err) {
+      console.error("[Delete Chat Messages Error]:", err);
+      return res.status(500).json({ error: "Failed to clear messages from database." });
+    }
+  }
+  return res.json({ success: true, message: `Cleared messages for thread ${threadId}` });
+});
+
+/**
+ * GET /api/chat/threads
+ * List all consultation threads with summaries
+ */
+app.get("/api/chat/threads", async (req, res) => {
+  const dbStatus = getStatus();
+  let allMsgs = [];
+
+  if (dbStatus.connected) {
+    try {
+      const rows = await query("SELECT * FROM consultation_messages ORDER BY created_at ASC");
+      if (rows && rows.length > 0) {
+        allMsgs = rows.map((r) => ({
+          id: r.id,
+          threadId: r.thread_id,
+          senderRole: r.sender_role,
+          engineerType: r.engineer_type,
+          senderName: r.sender_name,
+          text: r.message_text,
+          attachedContext: typeof r.attached_context === "string" ? JSON.parse(r.attached_context) : r.attached_context,
+          timestamp: r.created_at,
+        }));
+      }
+    } catch (e) {
+      console.warn("[Threads DB Error]:", e.message);
+    }
+  }
+
+  if (allMsgs.length === 0) {
+    allMsgs = loadFallbackMessages();
+  }
+
+  const threadMap = {};
+  for (const msg of allMsgs) {
+    if (!threadMap[msg.threadId]) {
+      threadMap[msg.threadId] = {
+        threadId: msg.threadId,
+        messageCount: 0,
+        lastMessage: null,
+        participants: new Set(),
+      };
+    }
+    threadMap[msg.threadId].messageCount++;
+    threadMap[msg.threadId].lastMessage = msg;
+    if (msg.senderName) threadMap[msg.threadId].participants.add(msg.senderName);
+  }
+
+  const threads = Object.values(threadMap).map((t) => ({
+    ...t,
+    participants: Array.from(t.participants),
+  }));
+
+  res.json({ success: true, count: threads.length, threads });
+});
+
+// ============================================================
+// START SERVER
+// ============================================================
+
+const server = app.listen(PORT, async () => {
+  console.log(`====================================================`);
+  console.log(` CivilHub Backend Server running on http://localhost:${PORT}`);
+  console.log(` OpenRouter API key loaded: ${Boolean(OPENROUTER_API_KEY)} (Model: ${OPENROUTER_MODEL})`);
+  console.log(` Gemini API key loaded: ${Boolean(GEMINI_API_KEY)} (Model: ${GEMINI_MODEL})`);
+
+  await initDB();
+  console.log(`====================================================`);
+});
+
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`\n[ERROR] Port ${PORT} is already in use by another process.`);
+    console.error(`Port ${PORT} has been freed. You can run 'npm run dev' now.\n`);
+    process.exit(1);
+  } else {
+    console.error("[Backend Server Error]:", err);
+  }
+});
